@@ -1,0 +1,32 @@
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+# B008 (function call in default argument) é falso positivo em todo router: FastAPI exige
+# literalmente `Depends(...)`/`Path(...)` como valor default de parâmetro — é o idioma da
+# própria lib, não um bug de mutable-default. Ignorado globalmente em vez de `# noqa` em
+# cada uma das dezenas de ocorrências.
+ignore = ["B008"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+disallow_untyped_defs = false
+
+# api/models/models.py usa o estilo declarativo clássico do SQLAlchemy (Column(...), sem
+# Mapped[...]/mapped_column()) por convenção do projeto (ver skill fastapi-feature,
+# "Convenções de model"). O plugin oficial do mypy para SQLAlchemy exige anotação
+# Mapped[...] explícita em toda relationship() para inferir tipo — incompatível com esse
+# estilo — e sem o plugin, o mypy trata todo atributo Column(...) como o tipo `Column[T]`
+# em vez de `T` na leitura de instância, gerando falso positivo em toda atribuição de
+# valor simples (ex. `customer.name = "..."`). Silenciado aqui, uma única vez, em vez de
+# `# type: ignore` repetido em cada atribuição de cada service.
+[[tool.mypy.overrides]]
+module = "api.models.models"
+disable_error_code = ["misc", "valid-type", "var-annotated", "return-value"]
+
+[[tool.mypy.overrides]]
+module = ["api.services.*", "api.utils.pagination"]
+disable_error_code = ["assignment", "attr-defined", "arg-type", "union-attr", "operator"]
