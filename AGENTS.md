@@ -51,7 +51,8 @@ código existente.
 
 ## Antes de considerar a mudança pronta
 
-- [ ] `ruff check .` e `mypy api/` executados sem violações (gate real do build), com toda supressão (`# noqa`/`# type: ignore`) documentada com o motivo.
+- [ ] `make verify` (ruff → mypy → bandit → pytest com cobertura) executado sem violações
+  — gate local único. Toda supressão (`# noqa`/`# type: ignore`) documentada com o motivo.
 - [ ] Testes relevantes executados (`pytest <caminho>`), não apenas escritos.
 - [ ] Falhas conhecidas da infraestrutura de testes (Docker/Testcontainers, ambiente local etc.) foram descartadas antes de concluir que existe um defeito na implementação.
 - [ ] Toda migration nova foi revisada manualmente. `alembic revision --autogenerate` define apenas a estrutura; alterações em dados, índices, constraints e estratégia de rollback (`downgrade()` completo) foram validadas explicitamente.

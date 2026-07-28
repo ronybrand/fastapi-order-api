@@ -30,3 +30,6 @@ disable_error_code = ["misc", "valid-type", "var-annotated", "return-value"]
 [[tool.mypy.overrides]]
 module = ["api.services.*", "api.utils.pagination"]
 disable_error_code = ["assignment", "attr-defined", "arg-type", "union-attr", "operator"]
+
+[tool.coverage.report]
+fail_under = 80
