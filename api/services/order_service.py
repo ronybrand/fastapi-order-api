@@ -192,7 +192,7 @@ class OrderService:
             raise CustomAPIException(
                 status_code=400,
                 message=f"Order {order_id} is already canceled",
-                code="VALIDATION-04",
+                code="VALIDATION-08",
                 params={"id": str(order_id), "status": order.status.value},
             )
 

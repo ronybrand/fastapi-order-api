@@ -117,7 +117,7 @@ def test_cancel_fails_when_already_canceled():
         OrderService.cancel(mock_db, order.id, CURRENT_USER)
 
     assert exc.value.status_code == 400
-    assert exc.value.detail["code"] == "VALIDATION-04"
+    assert exc.value.detail["code"] == "VALIDATION-08"
 
 
 def test_cancel_happy_path_from_open():

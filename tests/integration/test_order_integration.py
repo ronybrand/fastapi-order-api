@@ -71,7 +71,7 @@ def test_cancel_already_canceled_order_returns_validation_error(client):
     response = client.post(f"/orders/{order['id']}/cancel", headers=auth_headers())
 
     assert response.status_code == 400
-    assert response.json()["code"] == "VALIDATION-04"
+    assert response.json()["code"] == "VALIDATION-08"
 
 
 def test_add_update_remove_item_flow(client):
