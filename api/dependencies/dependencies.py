@@ -8,7 +8,9 @@ from jose import JWTError, jwt
 from api.security.roles import ROLE_USER
 from database import SessionLocal
 
-_DEFAULT_JWT_SECRET = "insecure-dev-secret-change-me"
+# Sentinela de dev/test, não um segredo real — o guard abaixo falha o startup se este
+# valor sobreviver fora de development/test (ver JWT_SECRET fail-fast guard).
+_DEFAULT_JWT_SECRET = "insecure-dev-secret-change-me"  # nosec B105
 JWT_SECRET = os.environ.get("JWT_SECRET", _DEFAULT_JWT_SECRET)
 JWT_ALGORITHM = "HS256"
 JWT_AUDIENCE = os.environ.get("JWT_AUDIENCE", "fastapi-order-api")

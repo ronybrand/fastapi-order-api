@@ -18,3 +18,4 @@ testcontainers[postgres]==4.9.0
 
 ruff==0.8.4
 mypy==1.13.0
+bandit==1.9.4
