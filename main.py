@@ -95,6 +95,17 @@ async def stale_data_exception_handler(request: Request, exc: StaleDataError):
     return JSONResponse(content=content, status_code=status.HTTP_409_CONFLICT)
 
 
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    # Catch-all para o que nenhum handler acima tratou: loga a stack trace completa com o
+    # request_id de correlação (ver RequestIdFilter) para investigação, mas nunca devolve
+    # detalhes internos (tipo da exceção, stack trace, mensagem) ao client — evita vazar
+    # estrutura interna da aplicação em produção.
+    logger.exception("unhandled_exception: path=%s method=%s", request.url.path, request.method)
+    content = {"message": "Internal server error", "code": "INTERNAL-00", "params": {}}
+    return JSONResponse(content=content, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 app.include_router(customers.router)
 app.include_router(orders.router)
 
@@ -109,4 +120,6 @@ def health_check(db=Depends(get_db)):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Conveniência de dev local (`python main.py`); em produção o processo sobe via
+    # `uvicorn` CLI/container, não por este bloco.
+    uvicorn.run(app, host="0.0.0.0", port=8000)  # nosec B104
