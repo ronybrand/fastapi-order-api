@@ -44,7 +44,7 @@ código existente.
 
 ## Baseline de segurança (não desativar por acidente)
 
-- [ ] Security headers (`SecurityHeadersMiddleware`), rate limiting (`slowapi`), limite de tamanho de body, validação de `aud`/`iss` do JWT e o guard de CORS fail-fast em produção permanecem ativos; nenhuma dessas proteções foi desabilitada ou contornada para viabilizar uma implementação ou teste.
+- [ ] Security headers (`SecurityHeadersMiddleware`), rate limiting (`slowapi`), limite de tamanho de body, validação de `aud`/`iss` do JWT e os guards fail-fast em produção (CORS sem origem configurada, `JWT_SECRET` no valor default) permanecem ativos; nenhuma dessas proteções foi desabilitada ou contornada para viabilizar uma implementação ou teste.
 - [ ] `/docs`/`/redoc`/`/openapi.json` continuam desabilitados fora do ambiente de desenvolvimento.
 - [ ] Segredos, chaves, tokens e connection strings nunca são commitados em código-fonte ou migrations; utilizar exclusivamente variável de ambiente/secret manager.
 - [ ] Dados sensíveis nunca aparecem em `logging`/`print` em texto claro (incluindo payloads de erro de validação) e não são expostos num schema de resposta sem necessidade real. Campos marcados como sensíveis utilizam exclusivamente `mask_sensitive()`/`Field(exclude=True)`.
