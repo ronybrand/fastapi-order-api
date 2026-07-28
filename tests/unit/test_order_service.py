@@ -1,13 +1,13 @@
 from decimal import Decimal
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from api.dependencies.dependencies import CurrentUser
 from api.models.models import Customer, Item, Order, OrderStatus
-from api.schemas.schemas import ItemInput, OrderCreate
+from api.schemas.schemas import ItemInput, OrderCreate, SearchRequest
 from api.services.order_service import OrderService
 from api.utils.custom_api_exception import CustomAPIException
 
@@ -128,3 +128,16 @@ def test_cancel_happy_path_from_open():
     result = OrderService.cancel(mock_db, order.id, CURRENT_USER)
 
     assert result.status == OrderStatus.CANCELED
+
+
+def test_search_eager_loads_items_to_avoid_n_plus_one():
+    mock_db = MagicMock(spec=Session)
+    mock_filtered_query = mock_db.query.return_value.filter.return_value
+
+    with patch("api.services.order_service.paginate", return_value=([], 0)) as mock_paginate:
+        OrderService.search(mock_db, SearchRequest())
+
+    mock_filtered_query.options.assert_called_once()
+    (loader_option,) = mock_filtered_query.options.call_args[0]
+    assert str(loader_option) == str(selectinload(Order.items))
+    mock_paginate.assert_called_once_with(mock_filtered_query.options.return_value, Order, SearchRequest())

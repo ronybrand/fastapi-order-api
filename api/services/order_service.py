@@ -2,7 +2,7 @@ import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from api.dependencies.dependencies import CurrentUser
 from api.events.order_events import build_order_status_changed_event, publish_order_status_changed
@@ -208,4 +208,7 @@ class OrderService:
 
     @staticmethod
     def search(db: Session, request: SearchRequest) -> tuple[list[Order], int]:
-        return paginate(_active_order_query(db), Order, request)
+        # OrderResponse inclui items/total: sem eager load aqui, cada Order da página
+        # dispara uma query extra pros seus items (N+1) na serialização da response.
+        query = _active_order_query(db).options(selectinload(Order.items))
+        return paginate(query, Order, request)
