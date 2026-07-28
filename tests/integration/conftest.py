@@ -17,7 +17,11 @@ def postgres_container():
 
 @pytest.fixture(scope="session")
 def engine(postgres_container):
-    engine = create_engine(postgres_container.get_connection_url())
+    # "localhost" resolve para ::1 (IPv6) antes de 127.0.0.1 nesta máquina, e o port
+    # forwarding de IPv6 do Docker Desktop derruba a conexão ("server closed the
+    # connection unexpectedly"). Forçar IPv4 evita essa falha de rede local.
+    url = postgres_container.get_connection_url().replace("localhost", "127.0.0.1")
+    engine = create_engine(url)
     with engine.connect() as connection:
         connection.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
         connection.commit()
