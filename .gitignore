@@ -8,3 +8,5 @@ venv/
 .ruff_cache/
 *.db
 .env
+.coverage
+uv.lock
