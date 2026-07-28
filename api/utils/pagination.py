@@ -1,5 +1,6 @@
 from sqlalchemy import and_, inspect
 from sqlalchemy.orm import Query
+from sqlalchemy.sql.base import ColumnCollection
 
 from api.schemas.schemas import SearchRequest
 from api.utils.custom_api_exception import CustomAPIException
@@ -37,7 +38,7 @@ def paginate(query: Query, model: type, request: SearchRequest) -> tuple[list, i
     """Motor de busca/filtro/paginação compartilhado entre domínios (ver skill
     fastapi-feature, seção "Busca, filtro e paginação"). Resolve campo via metadata do
     model (`inspect(model).columns`), nunca via allowlist mantida à mão por domínio."""
-    columns = inspect(model).columns
+    columns: ColumnCollection = inspect(model).columns
 
     for field, conditions in (request.filters or {}).items():
         column = columns.get(field)
