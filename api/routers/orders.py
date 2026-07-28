@@ -36,6 +36,35 @@ def create_order(
     return OrderService.create(db, order, current_user)
 
 
+# As rotas de busca (`/search`) precisam ser declaradas antes de `/{order_id}`: um path
+# estático depois de um dinâmico nunca é alcançado — `/orders/search` casaria com
+# `/{order_id}` (order_id="search") e falharia a validação de UUID antes de chegar aqui.
+@router.get(
+    "/search", response_model=PaginatedResponse[OrderResponse], summary="Search orders via query params"
+)
+def search_orders_get(
+    search: SearchRequest = Depends(),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Searches orders using page/size/sort query params."""
+    items, total = OrderService.search(db, search)
+    return PaginatedResponse(items=items, total=total, page=search.page, size=search.size)
+
+
+@router.post(
+    "/search", response_model=PaginatedResponse[OrderResponse], summary="Search orders via request body"
+)
+def search_orders_post(
+    search: SearchRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Searches orders, accepting the full `filters` payload in the request body."""
+    items, total = OrderService.search(db, search)
+    return PaginatedResponse(items=items, total=total, page=search.page, size=search.size)
+
+
 @router.get(
     "/{order_id}",
     response_model=OrderResponse,
@@ -163,29 +192,3 @@ def cancel_order(
 ):
     """Transitions an order from OPEN or CONFIRMED to CANCELED."""
     return OrderService.cancel(db, order_id, current_user)
-
-
-@router.get(
-    "/search", response_model=PaginatedResponse[OrderResponse], summary="Search orders via query params"
-)
-def search_orders_get(
-    search: SearchRequest = Depends(),
-    db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
-):
-    """Searches orders using page/size/sort query params."""
-    items, total = OrderService.search(db, search)
-    return PaginatedResponse(items=items, total=total, page=search.page, size=search.size)
-
-
-@router.post(
-    "/search", response_model=PaginatedResponse[OrderResponse], summary="Search orders via request body"
-)
-def search_orders_post(
-    search: SearchRequest,
-    db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
-):
-    """Searches orders, accepting the full `filters` payload in the request body."""
-    items, total = OrderService.search(db, search)
-    return PaginatedResponse(items=items, total=total, page=search.page, size=search.size)

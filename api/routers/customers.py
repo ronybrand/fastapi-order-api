@@ -36,6 +36,41 @@ def create_customer(
     return CustomerService.create(db, customer, current_user)
 
 
+# As rotas de busca (`/search`) precisam ser declaradas antes de `/{customer_id}`: o FastAPI
+# resolve rotas na ordem de registro, e um path estático depois de um dinâmico nunca é
+# alcançado — `/customers/search` casaria com `/{customer_id}` (customer_id="search") e
+# falharia a validação de UUID antes de chegar aqui.
+@router.get(
+    "/search",
+    response_model=PaginatedResponse[CustomerResponse],
+    summary="Search customers via query params",
+)
+def search_customers_get(
+    search: SearchRequest = Depends(),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Searches customers using page/size/sort query params (no `filters`, use POST /search
+    for filter conditions — a dict of dicts is not expressible as flat query params)."""
+    items, total = CustomerService.search(db, search)
+    return PaginatedResponse(items=items, total=total, page=search.page, size=search.size)
+
+
+@router.post(
+    "/search",
+    response_model=PaginatedResponse[CustomerResponse],
+    summary="Search customers via request body",
+)
+def search_customers_post(
+    search: SearchRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Searches customers, accepting the full `filters` payload in the request body."""
+    items, total = CustomerService.search(db, search)
+    return PaginatedResponse(items=items, total=total, page=search.page, size=search.size)
+
+
 @router.get(
     "/{customer_id}",
     response_model=CustomerResponse,
@@ -87,34 +122,3 @@ def delete_customer(
 ):
     """Soft-deletes a customer. Blocked if the customer still has non-deleted orders."""
     CustomerService.delete(db, customer_id, current_user)
-
-
-@router.get(
-    "/search",
-    response_model=PaginatedResponse[CustomerResponse],
-    summary="Search customers via query params",
-)
-def search_customers_get(
-    search: SearchRequest = Depends(),
-    db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
-):
-    """Searches customers using page/size/sort query params (no `filters`, use POST /search
-    for filter conditions — a dict of dicts is not expressible as flat query params)."""
-    items, total = CustomerService.search(db, search)
-    return PaginatedResponse(items=items, total=total, page=search.page, size=search.size)
-
-
-@router.post(
-    "/search",
-    response_model=PaginatedResponse[CustomerResponse],
-    summary="Search customers via request body",
-)
-def search_customers_post(
-    search: SearchRequest,
-    db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
-):
-    """Searches customers, accepting the full `filters` payload in the request body."""
-    items, total = CustomerService.search(db, search)
-    return PaginatedResponse(items=items, total=total, page=search.page, size=search.size)
