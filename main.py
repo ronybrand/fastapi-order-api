@@ -29,7 +29,12 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - [%(request_id)s] - %(message)s",
 )
-logging.getLogger().addFilter(RequestIdFilter())
+# O filtro precisa estar no Handler, não no Logger raiz: um record de um logger filho
+# (httpx, uvicorn, ...) propaga direto para os handlers do raiz sem passar pelos filtros do
+# raiz (Logger.filters só é checado no logger que originou o record) — só assim todo log da
+# aplicação, inclusive de bibliotecas de terceiros, ganha o campo %(request_id)s.
+for _handler in logging.getLogger().handlers:
+    _handler.addFilter(RequestIdFilter())
 
 logger = logging.getLogger(__name__)
 
