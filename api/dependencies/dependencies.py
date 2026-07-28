@@ -19,7 +19,8 @@ JWT_ISSUER = os.environ.get("JWT_ISSUER", "fastapi-order-api")
 # fechado, não abrir a porta pro segredo default hardcoded no código-fonte, que permitiria
 # forjar qualquer token válido.
 _SAFE_DEFAULT_SECRET_ENVS = {"development", "test"}
-if os.environ.get("APP_ENV", "development") not in _SAFE_DEFAULT_SECRET_ENVS and JWT_SECRET == _DEFAULT_JWT_SECRET:
+_app_env_is_unsafe = os.environ.get("APP_ENV", "development") not in _SAFE_DEFAULT_SECRET_ENVS
+if _app_env_is_unsafe and JWT_SECRET == _DEFAULT_JWT_SECRET:
     raise RuntimeError("JWT_SECRET must be set to a non-default value outside development/test")
 
 _bearer_scheme = HTTPBearer(auto_error=False)
