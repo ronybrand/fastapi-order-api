@@ -1,4 +1,4 @@
-from sqlalchemy import inspect
+from sqlalchemy import and_, inspect
 from sqlalchemy.orm import Query
 
 from api.schemas.schemas import SearchRequest
@@ -25,9 +25,12 @@ def _build_condition(column, conditions: list[dict]):
         build = _OPERATORS.get(operator)
         if build is None:
             raise ValueError(f"Unknown operator: {operator}")
-        coerced = column.type.python_type(value) if not isinstance(value, list) else value
+        if isinstance(value, list):
+            coerced = [column.type.python_type(item) for item in value]
+        else:
+            coerced = column.type.python_type(value)
         clauses.append(build(column, coerced))
-    return clauses[0] if len(clauses) == 1 else clauses
+    return clauses[0] if len(clauses) == 1 else and_(*clauses)
 
 
 def paginate(query: Query, model: type, request: SearchRequest) -> tuple[list, int]:
