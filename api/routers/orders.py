@@ -24,7 +24,10 @@ router = APIRouter(prefix="/orders", tags=["orders"])
     status_code=201,
     summary="Create a new order",
     responses={
-        400: {"model": DefaultErrorResponse, "description": "Validation error / customer not found"},
+        400: {
+            "model": DefaultErrorResponse,
+            "description": "VALIDATION-01 (request schema) / VALIDATION-07 (customer not found)",
+        },
     },
 )
 def create_order(
@@ -69,7 +72,7 @@ def search_orders_post(
     "/{order_id}",
     response_model=OrderResponse,
     summary="Get order by ID",
-    responses={404: {"model": DefaultErrorResponse, "description": "Order not found"}},
+    responses={404: {"model": DefaultErrorResponse, "description": "RESOURCE-NOT-FOUND-02"}},
 )
 def get_order(
     order_id: UUID = Path(...),
@@ -84,7 +87,7 @@ def get_order(
     "/{order_id}",
     status_code=204,
     summary="Delete order",
-    responses={404: {"model": DefaultErrorResponse, "description": "Order not found"}},
+    responses={404: {"model": DefaultErrorResponse, "description": "RESOURCE-NOT-FOUND-02"}},
 )
 def delete_order(
     order_id: UUID = Path(...),
@@ -100,9 +103,9 @@ def delete_order(
     response_model=OrderResponse,
     summary="Add an item to an order",
     responses={
-        400: {"model": DefaultErrorResponse, "description": "Order is not editable"},
-        404: {"model": DefaultErrorResponse, "description": "Order not found"},
-        409: {"model": DefaultErrorResponse, "description": "Concurrent modification"},
+        400: {"model": DefaultErrorResponse, "description": "VALIDATION-02 (order is not editable)"},
+        404: {"model": DefaultErrorResponse, "description": "RESOURCE-NOT-FOUND-02"},
+        409: {"model": DefaultErrorResponse, "description": "CONFLICT-00 (concurrent modification)"},
     },
 )
 def add_item(
@@ -120,9 +123,12 @@ def add_item(
     response_model=OrderResponse,
     summary="Update a line item's quantity",
     responses={
-        400: {"model": DefaultErrorResponse, "description": "Order is not editable"},
-        404: {"model": DefaultErrorResponse, "description": "Order or item not found"},
-        409: {"model": DefaultErrorResponse, "description": "Concurrent modification"},
+        400: {"model": DefaultErrorResponse, "description": "VALIDATION-02 (order is not editable)"},
+        404: {
+            "model": DefaultErrorResponse,
+            "description": "RESOURCE-NOT-FOUND-02 (order) / RESOURCE-NOT-FOUND-03 (item)",
+        },
+        409: {"model": DefaultErrorResponse, "description": "CONFLICT-00 (concurrent modification)"},
     },
 )
 def update_item_quantity(
@@ -141,9 +147,12 @@ def update_item_quantity(
     response_model=OrderResponse,
     summary="Remove an item from an order",
     responses={
-        400: {"model": DefaultErrorResponse, "description": "Order is not editable"},
-        404: {"model": DefaultErrorResponse, "description": "Order or item not found"},
-        409: {"model": DefaultErrorResponse, "description": "Concurrent modification"},
+        400: {"model": DefaultErrorResponse, "description": "VALIDATION-02 (order is not editable)"},
+        404: {
+            "model": DefaultErrorResponse,
+            "description": "RESOURCE-NOT-FOUND-02 (order) / RESOURCE-NOT-FOUND-03 (item)",
+        },
+        409: {"model": DefaultErrorResponse, "description": "CONFLICT-00 (concurrent modification)"},
     },
 )
 def remove_item(
@@ -161,9 +170,12 @@ def remove_item(
     response_model=OrderResponse,
     summary="Confirm an order",
     responses={
-        400: {"model": DefaultErrorResponse, "description": "Invalid transition / order is empty"},
-        404: {"model": DefaultErrorResponse, "description": "Order not found"},
-        409: {"model": DefaultErrorResponse, "description": "Concurrent modification"},
+        400: {
+            "model": DefaultErrorResponse,
+            "description": "VALIDATION-04 (invalid transition) / VALIDATION-03 (order is empty)",
+        },
+        404: {"model": DefaultErrorResponse, "description": "RESOURCE-NOT-FOUND-02"},
+        409: {"model": DefaultErrorResponse, "description": "CONFLICT-00 (concurrent modification)"},
     },
 )
 def confirm_order(
@@ -180,9 +192,9 @@ def confirm_order(
     response_model=OrderResponse,
     summary="Cancel an order",
     responses={
-        400: {"model": DefaultErrorResponse, "description": "Order is already canceled"},
-        404: {"model": DefaultErrorResponse, "description": "Order not found"},
-        409: {"model": DefaultErrorResponse, "description": "Concurrent modification"},
+        400: {"model": DefaultErrorResponse, "description": "VALIDATION-08 (order is already canceled)"},
+        404: {"model": DefaultErrorResponse, "description": "RESOURCE-NOT-FOUND-02"},
+        409: {"model": DefaultErrorResponse, "description": "CONFLICT-00 (concurrent modification)"},
     },
 )
 def cancel_order(

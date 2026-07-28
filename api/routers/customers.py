@@ -23,8 +23,11 @@ router = APIRouter(prefix="/customers", tags=["customers"])
     status_code=201,
     summary="Create a new customer",
     responses={
-        400: {"model": DefaultErrorResponse, "description": "Validation error"},
-        409: {"model": DefaultErrorResponse, "description": "tax_id or passport_number already exists"},
+        400: {"model": DefaultErrorResponse, "description": "VALIDATION-01 (request schema)"},
+        409: {
+            "model": DefaultErrorResponse,
+            "description": "CONFLICT-01 (tax_id exists) / CONFLICT-02 (passport_number exists)",
+        },
     },
 )
 def create_customer(
@@ -75,7 +78,7 @@ def search_customers_post(
     "/{customer_id}",
     response_model=CustomerResponse,
     summary="Get customer by ID",
-    responses={404: {"model": DefaultErrorResponse, "description": "Customer not found"}},
+    responses={404: {"model": DefaultErrorResponse, "description": "RESOURCE-NOT-FOUND-01"}},
 )
 def get_customer(
     customer_id: UUID = Path(...),
@@ -91,9 +94,12 @@ def get_customer(
     response_model=CustomerResponse,
     summary="Update customer",
     responses={
-        400: {"model": DefaultErrorResponse, "description": "Validation error"},
-        404: {"model": DefaultErrorResponse, "description": "Customer not found"},
-        409: {"model": DefaultErrorResponse, "description": "tax_id or passport_number already exists"},
+        400: {"model": DefaultErrorResponse, "description": "VALIDATION-01 (request schema)"},
+        404: {"model": DefaultErrorResponse, "description": "RESOURCE-NOT-FOUND-01"},
+        409: {
+            "model": DefaultErrorResponse,
+            "description": "CONFLICT-01 (tax_id exists) / CONFLICT-02 (passport_number exists)",
+        },
     },
 )
 def update_customer(
@@ -111,8 +117,8 @@ def update_customer(
     status_code=204,
     summary="Delete customer",
     responses={
-        404: {"model": DefaultErrorResponse, "description": "Customer not found"},
-        409: {"model": DefaultErrorResponse, "description": "Customer has orders and cannot be deleted"},
+        404: {"model": DefaultErrorResponse, "description": "RESOURCE-NOT-FOUND-01"},
+        409: {"model": DefaultErrorResponse, "description": "CONFLICT-03 (customer has orders)"},
     },
 )
 def delete_customer(
