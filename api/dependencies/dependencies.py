@@ -8,10 +8,19 @@ from jose import JWTError, jwt
 from api.security.roles import ROLE_USER
 from database import SessionLocal
 
-JWT_SECRET = os.environ.get("JWT_SECRET", "insecure-dev-secret-change-me")
+_DEFAULT_JWT_SECRET = "insecure-dev-secret-change-me"
+JWT_SECRET = os.environ.get("JWT_SECRET", _DEFAULT_JWT_SECRET)
 JWT_ALGORITHM = "HS256"
 JWT_AUDIENCE = os.environ.get("JWT_AUDIENCE", "fastapi-order-api")
 JWT_ISSUER = os.environ.get("JWT_ISSUER", "fastapi-order-api")
+
+# Mesma política do CORS em main.py, mas com allowlist em vez de blocklist: um APP_ENV
+# esquecido ou desconhecido (ex.: variável não propagada pelo orquestrador) deve falhar
+# fechado, não abrir a porta pro segredo default hardcoded no código-fonte, que permitiria
+# forjar qualquer token válido.
+_SAFE_DEFAULT_SECRET_ENVS = {"development", "test"}
+if os.environ.get("APP_ENV", "development") not in _SAFE_DEFAULT_SECRET_ENVS and JWT_SECRET == _DEFAULT_JWT_SECRET:
+    raise RuntimeError("JWT_SECRET must be set to a non-default value outside development/test")
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 

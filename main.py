@@ -22,8 +22,9 @@ from api.security.middleware import (
 )
 from api.utils.custom_api_exception import CustomAPIException
 
+_SAFE_DEFAULT_ENVS = {"development", "test"}
 APP_ENV = os.environ.get("APP_ENV", "development")
-IS_PRODUCTION = APP_ENV == "production"
+IS_PRODUCTION = APP_ENV not in _SAFE_DEFAULT_ENVS
 
 logging.basicConfig(
     level=logging.INFO,
