@@ -26,8 +26,12 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     op.execute('CREATE EXTENSION IF NOT EXISTS pgcrypto')
 
+    # Não criar o ENUM manualmente aqui: `create_table` abaixo já cria o tipo automaticamente
+    # ao processar a coluna `status` (dispatch before_create do próprio SQLAlchemy) — criar os
+    # dois gera "type order_status already exists". `create_type=False` também não se aplica
+    # porque queremos que o create_table seja o único responsável pelo ciclo de vida do tipo,
+    # inclusive no downgrade (drop_table remove o ENUM associado automaticamente).
     order_status = postgresql.ENUM("OPEN", "CONFIRMED", "CANCELED", name="order_status")
-    order_status.create(op.get_bind(), checkfirst=True)
 
     op.create_table(
         "customers",
@@ -83,5 +87,8 @@ def downgrade() -> None:
     op.drop_index("ix_orders_customer_id", table_name="orders")
     op.drop_table("orders")
     op.drop_table("customers")
+    # drop_table("orders") NÃO derruba o tipo `order_status` sozinho (testado contra Postgres
+    # real: o tipo sobrevive ao DROP TABLE) — precisa do drop explícito abaixo, ou o próximo
+    # upgrade falha com "type order_status already exists".
     postgresql.ENUM(name="order_status").drop(op.get_bind(), checkfirst=True)
     op.execute('DROP EXTENSION IF EXISTS pgcrypto')
