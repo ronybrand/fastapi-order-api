@@ -1,14 +1,11 @@
 from decimal import Decimal
-from enum import Enum
-from typing import Generic, TypeVar
+from enum import StrEnum
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from api.models.models import OrderStatus
 from api.utils.max_items import MAX_ITEMS_PER_ORDER
-
-T = TypeVar("T")
 
 
 class DefaultErrorResponse(BaseModel):
@@ -18,7 +15,7 @@ class DefaultErrorResponse(BaseModel):
 
 
 # --- SEARCH ---
-class FilterOperator(str, Enum):
+class FilterOperator(StrEnum):
     eq = "eq"
     neq = "neq"
     gt = "gt"
@@ -37,7 +34,7 @@ class SearchRequest(BaseModel):
     filters: dict[str, list[dict]] | None = None
 
 
-class PaginatedResponse(BaseModel, Generic[T]):
+class PaginatedResponse[T](BaseModel):
     items: list[T]
     total: int
     page: int

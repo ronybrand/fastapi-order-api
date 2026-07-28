@@ -44,7 +44,7 @@ class SoftDeleteMixin:
     deleted_by = Column(String, nullable=True)
 
 
-class OrderStatus(str, enum.Enum):
+class OrderStatus(enum.StrEnum):
     OPEN = "OPEN"
     CONFIRMED = "CONFIRMED"
     CANCELED = "CANCELED"
