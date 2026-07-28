@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Order Update — Order API</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #1a1a2e;
+            padding: 32px 16px;
+        }
+        .email-wrapper { max-width: 600px; margin: 0 auto; }
+        .header {
+            background: linear-gradient(135deg, #16213e 0%, #0f3460 100%);
+            border-radius: 16px 16px 0 0;
+            padding: 32px 40px;
+            text-align: center;
+        }
+        .brand { font-size: 12px; font-weight: 600; letter-spacing: 3px; color: #e94560; text-transform: uppercase; }
+        .header h1 { font-size: 24px; font-weight: 700; color: #ffffff; margin: 12px 0; }
+        .status-badge {
+            display: inline-block;
+            margin-top: 12px;
+            padding: 6px 20px;
+            border-radius: 50px;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #ffffff;
+        }
+        .status-OPEN { background-color: #f59e0b; }
+        .status-CONFIRMED { background-color: #10b981; }
+        .status-CANCELED { background-color: #ef4444; }
+        .body { background-color: #ffffff; padding: 32px 40px; }
+        .greeting { font-weight: 600; margin-bottom: 8px; }
+        .message { color: #4a5568; line-height: 1.6; margin-bottom: 24px; }
+        .order-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; }
+        .detail-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px; }
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #16213e, #0f3460);
+            color: #ffffff;
+        }
+        .footer { font-size: 12px; color: #94a3b8; margin-top: 24px; }
+    </style>
+</head>
+<body>
+<div class="email-wrapper">
+    <div class="header">
+        <div class="brand">Order API</div>
+        <h1>Your order status<br>has been updated</h1>
+        <span class="status-badge status-{{ new_status }}">{{ new_status }}</span>
+    </div>
+    <div class="body">
+        <p class="greeting">Hello, {{ customer_name }}!</p>
+
+        {% if new_status == "CONFIRMED" %}
+        <p class="message">Great news! Your order has been <strong>confirmed</strong> and is now being processed.</p>
+        {% endif %}
+        {% if new_status == "CANCELED" %}
+        <p class="message">We're sorry to inform you that your order has been <strong>canceled</strong>.</p>
+        {% endif %}
+
+        <div class="order-card">
+            <div class="detail-row"><span>Order ID</span><strong>{{ short_order_id }}...</strong></div>
+            <div class="detail-row"><span>Status</span><strong>{{ old_status }} &rarr; {{ new_status }}</strong></div>
+            <div class="detail-row"><span>Updated at</span><strong>{{ changed_at }}</strong></div>
+            <div class="total-row"><span>Total</span><strong>$ {{ total_amount }}</strong></div>
+        </div>
+
+        <p class="footer">This is an automated notification. Please do not reply.</p>
+    </div>
+</div>
+</body>
+</html>
