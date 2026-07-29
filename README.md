@@ -1,5 +1,8 @@
 # fastapi-order-api
 
+[![CI](https://github.com/ronybrand/fastapi-order-api/actions/workflows/ci.yml/badge.svg)](https://github.com/ronybrand/fastapi-order-api/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/ronybrand/fastapi-order-api/actions/workflows/codeql.yml/badge.svg)](https://github.com/ronybrand/fastapi-order-api/actions/workflows/codeql.yml)
+
 Implementação do domínio de Order Management em FastAPI, seguindo as convenções descritas
 na skill `fastapi-feature` (`.claude/skills/fastapi-feature/SKILL.md`, não versionada — ver
 `.gitignore`).
