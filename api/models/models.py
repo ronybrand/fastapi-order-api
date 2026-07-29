@@ -70,7 +70,9 @@ class Order(Base, AuditMixin, SoftDeleteMixin):
     __tablename__ = "orders"
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=_GEN_RANDOM_UUID)
-    customer_id = Column(UUID(as_uuid=True), ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False)
+    customer_id = Column(
+        UUID(as_uuid=True), ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
     status = Column(Enum(OrderStatus, name="order_status"), nullable=False, default=OrderStatus.OPEN)
     version = Column(Integer, nullable=False, default=1)
 
@@ -95,7 +97,9 @@ class Item(Base):
     __tablename__ = "items"
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=_GEN_RANDOM_UUID)
-    order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False)
+    order_id = Column(
+        UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     description = Column(String(255), nullable=False)
     unit_price = Column(Numeric(10, 2), nullable=False)
     quantity = Column(Integer, nullable=False)
