@@ -7,7 +7,13 @@ from uuid import uuid4
 import pytest
 
 from api.events.order_events import OrderStatusChangedEvent
-from api.events.rabbitmq_publisher import ORDER_STATUS_CHANGED_QUEUE, _json_default, publish_to_rabbitmq
+from api.events.rabbitmq_publisher import (
+    ORDER_STATUS_CHANGED_DLQ,
+    ORDER_STATUS_CHANGED_QUEUE,
+    QUEUE_ARGUMENTS,
+    _json_default,
+    publish_to_rabbitmq,
+)
 from api.models.models import OrderStatus
 
 _EVENT = OrderStatusChangedEvent(
@@ -28,7 +34,10 @@ def test_publish_declares_queue_and_publishes_json_body():
 
         publish_to_rabbitmq(_EVENT)
 
-    channel.queue_declare.assert_called_once_with(queue=ORDER_STATUS_CHANGED_QUEUE, durable=True)
+    channel.queue_declare.assert_any_call(queue=ORDER_STATUS_CHANGED_DLQ, durable=True)
+    channel.queue_declare.assert_any_call(
+        queue=ORDER_STATUS_CHANGED_QUEUE, durable=True, arguments=QUEUE_ARGUMENTS
+    )
     channel.basic_publish.assert_called_once()
     body = channel.basic_publish.call_args.kwargs["body"]
     payload = json.loads(body)

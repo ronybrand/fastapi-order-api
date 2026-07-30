@@ -9,13 +9,28 @@ from email.mime.text import MIMEText
 import pika
 
 from api.events.order_status_email import build_order_status_email_html
-from api.events.rabbitmq_publisher import ORDER_STATUS_CHANGED_QUEUE
+from api.events.rabbitmq_publisher import (
+    ORDER_STATUS_CHANGED_DLQ,
+    ORDER_STATUS_CHANGED_QUEUE,
+    QUEUE_ARGUMENTS,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("worker")
 
 RECONNECT_DELAY_SECONDS = 5
-REQUEUE_DELAY_SECONDS = 5
+RETRY_BACKOFF_SECONDS = 2
+MAX_RETRIES = 3
+
+_REQUIRED_EVENT_FIELDS = (
+    "order_id",
+    "customer_email",
+    "customer_name",
+    "old_status",
+    "new_status",
+    "total_amount",
+    "changed_at",
+)
 
 
 def _send_email(event: dict) -> None:
@@ -36,9 +51,53 @@ def _send_email(event: dict) -> None:
         smtp.send_message(message)
 
 
-def _handle_message(channel, method, _properties, body) -> None:
+def _is_valid_event(payload: object) -> bool:
+    return isinstance(payload, dict) and all(field in payload for field in _REQUIRED_EVENT_FIELDS)
+
+
+def _retry_or_dead_letter(channel, method, properties, body, error: Exception) -> None:
+    """Retry limitado com backoff fixo (2s) e header `x-retry-count`; ao esgotar
+    MAX_RETRIES, a mensagem é rejeitada sem requeue e roteada para a DLQ
+    (order.status.changed.dlq, configurada via x-dead-letter-exchange/routing-key na
+    própria fila - ver QUEUE_ARGUMENTS). Sem esse limite, uma falha persistente (SMTP fora
+    do ar, por exemplo) reprocessaria a mesma mensagem para sempre - constatado na prática
+    rodando este worker contra um Mailpit temporariamente inacessível."""
+    headers = dict((properties.headers or {}) if properties else {})
+    retry_count = int(headers.get("x-retry-count", 0)) + 1
+
+    if retry_count > MAX_RETRIES:
+        logger.error("Exceeded %s retries, sending message to DLQ", MAX_RETRIES, exc_info=error)
+        channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+        return
+
+    logger.warning(
+        "Failed to process message (attempt %s/%s), retrying: %s", retry_count, MAX_RETRIES, error
+    )
+    time.sleep(RETRY_BACKOFF_SECONDS)
+    headers["x-retry-count"] = retry_count
+    channel.basic_publish(
+        exchange="",
+        routing_key=ORDER_STATUS_CHANGED_QUEUE,
+        body=body,
+        properties=pika.BasicProperties(content_type="application/json", delivery_mode=2, headers=headers),
+    )
+    channel.basic_ack(delivery_tag=method.delivery_tag)
+
+
+def _handle_message(channel, method, properties, body) -> None:
     try:
         event = json.loads(body)
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        logger.error("Malformed order status message, sending to DLQ: %s", error)
+        channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+        return
+
+    if not _is_valid_event(event):
+        logger.error("Order status message missing required fields, sending to DLQ")
+        channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+        return
+
+    try:
         _send_email(event)
         # Nunca logar customer_email em texto claro (mesma convenção de order_events.py).
         logger.info(
@@ -48,21 +107,12 @@ def _handle_message(channel, method, _properties, body) -> None:
             event["new_status"],
         )
         channel.basic_ack(delivery_tag=method.delivery_tag)
-    except Exception:
-        # Sem o delay, uma falha persistente (SMTP fora do ar, por exemplo) faria a mesma
-        # mensagem ser reentregue e falhar imediatamente em loop apertado, consumindo CPU e
-        # inundando o log - constatado na prática rodando este worker contra um Mailpit
-        # temporariamente inacessível.
-        logger.exception(
-            "Failed to process order status message, requeueing in %ss", REQUEUE_DELAY_SECONDS
-        )
-        time.sleep(REQUEUE_DELAY_SECONDS)
-        channel.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+    except Exception as error:
+        _retry_or_dead_letter(channel, method, properties, body, error)
 
 
 def run() -> None:
-    """Worker standalone que consome `order.status.changed` e processa a notificação
-    (hoje um log estruturado, equivalente ao stub de e-mail do java-order-api/nest-order-api).
+    """Worker standalone que consome `order.status.changed` e envia a notificação por e-mail.
     Reconecta indefinidamente se o broker cair ou estiver indisponível no boot, em vez de
     encerrar o processo - roda como um processo/container de longa duração separado da API
     (`python worker.py`), nao dentro do processo do uvicorn."""
@@ -72,7 +122,8 @@ def run() -> None:
         try:
             connection = pika.BlockingConnection(pika.URLParameters(url))
             channel = connection.channel()
-            channel.queue_declare(queue=ORDER_STATUS_CHANGED_QUEUE, durable=True)
+            channel.queue_declare(queue=ORDER_STATUS_CHANGED_DLQ, durable=True)
+            channel.queue_declare(queue=ORDER_STATUS_CHANGED_QUEUE, durable=True, arguments=QUEUE_ARGUMENTS)
             channel.basic_qos(prefetch_count=10)
             channel.basic_consume(queue=ORDER_STATUS_CHANGED_QUEUE, on_message_callback=_handle_message)
             logger.info("worker_started: queue=%s", ORDER_STATUS_CHANGED_QUEUE)
