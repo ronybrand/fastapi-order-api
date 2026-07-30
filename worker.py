@@ -15,6 +15,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger("worker")
 
 RECONNECT_DELAY_SECONDS = 5
+REQUEUE_DELAY_SECONDS = 5
 
 
 def _send_email(event: dict) -> None:
@@ -48,7 +49,14 @@ def _handle_message(channel, method, _properties, body) -> None:
         )
         channel.basic_ack(delivery_tag=method.delivery_tag)
     except Exception:
-        logger.exception("Failed to process order status message, requeueing")
+        # Sem o delay, uma falha persistente (SMTP fora do ar, por exemplo) faria a mesma
+        # mensagem ser reentregue e falhar imediatamente em loop apertado, consumindo CPU e
+        # inundando o log - constatado na prática rodando este worker contra um Mailpit
+        # temporariamente inacessível.
+        logger.exception(
+            "Failed to process order status message, requeueing in %ss", REQUEUE_DELAY_SECONDS
+        )
+        time.sleep(REQUEUE_DELAY_SECONDS)
         channel.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
 
 
