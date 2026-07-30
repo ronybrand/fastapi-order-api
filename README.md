@@ -141,16 +141,16 @@ com `APP_ENV=production`.
 
 ## Rodando localmente
 
-Requer Postgres (ex. `docker run -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres
--e POSTGRES_DB=orders -p 5432:5432 postgres:16`) e RabbitMQ + Mailpit
-(`docker compose up rabbitmq mailpit`), além das variáveis de ambiente `DATABASE_URL`,
-`JWT_SECRET`, `JWT_AUDIENCE`, `JWT_ISSUER`, `CORS_ALLOWED_ORIGINS` (obrigatória apenas com
-`APP_ENV=production`), `RABBITMQ_URL` (default `amqp://guest:guest@localhost:5672/`) e
-`SMTP_HOST`/`SMTP_PORT`/`SMTP_FROM` (default Mailpit: `localhost`/`1025`/
-`no-reply@order-api.local`). Mailpit web UI para inspecionar os e-mails recebidos:
-`http://localhost:8025`.
+Requer Postgres, RabbitMQ e Mailpit — `docker compose up -d` sobe os três —, além das
+variáveis de ambiente `DATABASE_URL`, `JWT_SECRET`, `JWT_AUDIENCE`, `JWT_ISSUER`,
+`CORS_ALLOWED_ORIGINS` (obrigatória apenas com `APP_ENV=production`), `RABBITMQ_URL`
+(default `amqp://guest:guest@localhost:5672/`) e `SMTP_HOST`/`SMTP_PORT`/`SMTP_FROM`
+(default Mailpit: `localhost`/`1025`/`no-reply@order-api.local`). Mailpit web UI para
+inspecionar os e-mails recebidos: `http://localhost:8025`; RabbitMQ Management UI
+(guest/guest): `http://localhost:15672`.
 
 ```
+docker compose up -d
 pip install -r requirements.txt
 alembic upgrade head
 uvicorn main:app --reload

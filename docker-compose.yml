@@ -1,4 +1,15 @@
 services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: orders
+    ports:
+      - "5432:5432"
+    volumes:
+      - fastapi-order-api-db:/var/lib/postgresql/data
+
   rabbitmq:
     image: rabbitmq:3-management-alpine
     environment:
@@ -13,3 +24,6 @@ services:
     ports:
       - "1025:1025" # SMTP catch-all (dev)
       - "8025:8025" # web UI para inspecionar os e-mails recebidos
+
+volumes:
+  fastapi-order-api-db:
