@@ -47,6 +47,8 @@ agrupam o histórico por tema, não por tag.
   filhos (bibliotecas de terceiros).
 - Conexão dos testes de integração com Testcontainers forçada para IPv4 (instabilidade de
   ambiente).
+- `DeprecationWarning`s surgidas após bump de dependências (`testcontainers.postgres` →
+  `testcontainers.community.postgres`; `httpx` → `httpx2` usado pelo `starlette.testclient`).
 - Handler global para exceções não tratadas: loga stack trace com `request_id`, devolve só
   `{"code": "INTERNAL-00"}` ao client, sem vazar detalhes internos.
 
