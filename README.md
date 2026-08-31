@@ -3,171 +3,172 @@
 [![CI](https://github.com/ronybrand/fastapi-order-api/actions/workflows/ci.yml/badge.svg)](https://github.com/ronybrand/fastapi-order-api/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/ronybrand/fastapi-order-api/actions/workflows/codeql.yml/badge.svg)](https://github.com/ronybrand/fastapi-order-api/actions/workflows/codeql.yml)
 
-Implementação do domínio de Order Management em FastAPI, seguindo as convenções descritas
-na skill `fastapi-feature` (`.claude/skills/fastapi-feature/SKILL.md`, não versionada — ver
-`.gitignore`).
+Order Management domain implementation in FastAPI, following the conventions described
+in the `fastapi-feature` skill (`.claude/skills/fastapi-feature/SKILL.md`, not version
+controlled — see `.gitignore`).
 
-## Domínio
+## Domain
 
-Domínio simples de gestão de pedidos com dois agregados:
+Simple order management domain with two aggregates:
 
 ```
 Customer (1) ──< Order (1) ──< Item
 ```
 
-Fora de escopo: pagamento, estoque, catálogo de produtos, envio/frete.
+Out of scope: payment, inventory, product catalog, shipping.
 
-### Entidades
+### Entities
 
 #### Customer
 
-| Campo | Tipo | Regras |
+| Field | Type | Rules |
 |---|---|---|
-| `id` | UUID | gerado |
-| `name` | string | obrigatório, `min_length=1` |
-| `tax_id` | string | obrigatório, **único**, padrão `^[A-Za-z0-9./-]{5,20}$` |
-| `passport_number` | string | opcional, **único** quando presente, padrão ICAO `^[A-Z0-9]{6,9}$` |
-| `email` | string | obrigatório, validado via `EmailStr` (Pydantic) |
-| `deleted_at` | datetime | soft-delete (nulo = ativo) |
+| `id` | UUID | generated |
+| `name` | string | required, `min_length=1` |
+| `tax_id` | string | required, **unique**, pattern `^[A-Za-z0-9./-]{5,20}$` |
+| `passport_number` | string | optional, **unique** when present, ICAO pattern `^[A-Z0-9]{6,9}$` |
+| `email` | string | required, validated via `EmailStr` (Pydantic) |
+| `deleted_at` | datetime | soft-delete (null = active) |
 
-- `tax_id`, `passport_number` e `email` são PII — nunca logados em texto claro
-  (`mask_sensitive()`, ver `api/utils/sensitive.py`).
+- `tax_id`, `passport_number` and `email` are PII — never logged in plaintext
+  (`mask_sensitive()`, see `api/utils/sensitive.py`).
 
 #### Order (aggregate root)
 
-| Campo | Tipo | Regras |
+| Field | Type | Rules |
 |---|---|---|
-| `id` | UUID | gerado |
-| `customer_id` | UUID | obrigatório, precisa referenciar um customer existente (`VALIDATION-07`) |
-| `items` | lista de Item | composição — ciclo de vida atrelado ao Order, máx. `MAX_ITEMS_PER_ORDER` (200) |
-| `total` | decimal | **derivado**, recalculado a cada mutação de itens |
-| `status` | enum `OrderStatus` | `OPEN → CONFIRMED → CANCELED`, default `OPEN` |
-| `version` | inteiro | controle de concorrência otimista (SQLAlchemy `StaleDataError` → `CONFLICT-00`) |
+| `id` | UUID | generated |
+| `customer_id` | UUID | required, must reference an existing customer (`VALIDATION-07`) |
+| `items` | list of Item | composition — lifecycle tied to the Order, max. `MAX_ITEMS_PER_ORDER` (200) |
+| `total` | decimal | **derived**, recalculated on every item mutation |
+| `status` | `OrderStatus` enum | `OPEN → CONFIRMED → CANCELED`, default `OPEN` |
+| `version` | integer | optimistic concurrency control (SQLAlchemy `StaleDataError` → `CONFLICT-00`) |
 
-- `confirm()` só é permitido a partir de `OPEN` e exige ao menos 1 item; falha com
-  `VALIDATION-04` (status inválido) ou `VALIDATION-03` (sem itens).
-- `cancel()` é permitido a partir de qualquer status exceto `CANCELED` (`VALIDATION-08`).
-- Enquanto `OPEN`, itens podem ser adicionados/removidos livremente (`is_editable`);
-  fora disso, `VALIDATION-02`.
+- `confirm()` is only allowed from `OPEN` and requires at least 1 item; fails with
+  `VALIDATION-04` (invalid status) or `VALIDATION-03` (no items).
+- `cancel()` is allowed from any status except `CANCELED` (`VALIDATION-08`).
+- While `OPEN`, items can be added/removed freely (`is_editable`); otherwise,
+  `VALIDATION-02`.
 
-#### Item (filho de Order)
+#### Item (child of Order)
 
-| Campo | Tipo | Regras |
+| Field | Type | Rules |
 |---|---|---|
-| `id` | UUID | gerado |
-| `order_id` | UUID | obrigatório |
-| `description` | string | obrigatório, não-branco, `max_length=255` |
-| `unit_price` | decimal | obrigatório, positivo (`gt=0`), máx. 2 casas decimais |
-| `quantity` | inteiro | obrigatório, positivo (`gt=0`) |
+| `id` | UUID | generated |
+| `order_id` | UUID | required |
+| `description` | string | required, non-blank, `max_length=255` |
+| `unit_price` | decimal | required, positive (`gt=0`), max. 2 decimal places |
+| `quantity` | integer | required, positive (`gt=0`) |
 
-- Subtotal do item = `unit_price * quantity` (calculado, não persistido).
+- Item subtotal = `unit_price * quantity` (computed, not persisted).
 
-### Evento `OrderStatusChangedEvent`
+### `OrderStatusChangedEvent` event
 
-Disparado ao final de `confirm()`/`cancel()`, somente quando o customer tem `email`
-não-vazio. Carrega `order_id`, `customer_email`, `customer_name`, `old_status`,
-`new_status`, `total_amount` e `changed_at`. Logado (log estruturado, e-mail nunca em
-texto claro) e publicado no RabbitMQ (`RABBITMQ_URL`) para processamento assíncrono pelo
-worker (`worker.py`), que envia o e-mail de fato via SMTP (`SMTP_HOST`/`SMTP_PORT`/
-`SMTP_FROM`, default Mailpit local), renderizado via Jinja2 a partir de
-`templates/email/order_status_changed.html`. Falha de broker/SMTP nunca derruba a
-requisição HTTP nem o commit do pedido (ver `api/events/rabbitmq_publisher.py`).
+Fired at the end of `confirm()`/`cancel()`, only when the customer has a non-empty
+`email`. Carries `order_id`, `customer_email`, `customer_name`, `old_status`,
+`new_status`, `total_amount` and `changed_at`. Logged (structured log, email never in
+plaintext) and published to RabbitMQ (`RABBITMQ_URL`) for asynchronous processing by
+the worker (`worker.py`), which actually sends the email via SMTP (`SMTP_HOST`/
+`SMTP_PORT`/`SMTP_FROM`, defaults to local Mailpit), rendered via Jinja2 from
+`templates/email/order_status_changed.html`. A broker/SMTP failure never breaks the
+HTTP request or the order's commit (see `api/events/rabbitmq_publisher.py`).
 
-### Catálogo de erros
+### Error catalog
 
-**Validação (400)**
-| Código | Descrição |
+**Validation (400)**
+| Code | Description |
 |---|---|
-| `VALIDATION-01` | corpo da requisição inválido (schema Pydantic) |
-| `VALIDATION-02` | order não editável no status atual |
-| `VALIDATION-03` | confirmar order sem itens |
-| `VALIDATION-04` | transição de status inválida ao confirmar |
-| `VALIDATION-05` | valor de filtro inválido na busca |
-| `VALIDATION-06` | campo de ordenação desconhecido na busca |
-| `VALIDATION-07` | customer inexistente ao criar order |
-| `VALIDATION-08` | cancelar order já cancelada |
+| `VALIDATION-01` | invalid request body (Pydantic schema) |
+| `VALIDATION-02` | order not editable in its current status |
+| `VALIDATION-03` | confirming an order with no items |
+| `VALIDATION-04` | invalid status transition when confirming |
+| `VALIDATION-05` | invalid filter value in search |
+| `VALIDATION-06` | unknown sort field in search |
+| `VALIDATION-07` | nonexistent customer when creating an order |
+| `VALIDATION-08` | cancelling an already-cancelled order |
 
-**Não encontrado (404)**
-| Código | Descrição |
+**Not found (404)**
+| Code | Description |
 |---|---|
-| `RESOURCE-NOT-FOUND-01` | customer não encontrado |
-| `RESOURCE-NOT-FOUND-02` | order não encontrada |
-| `RESOURCE-NOT-FOUND-03` | item não encontrado |
+| `RESOURCE-NOT-FOUND-01` | customer not found |
+| `RESOURCE-NOT-FOUND-02` | order not found |
+| `RESOURCE-NOT-FOUND-03` | item not found |
 
-**Conflito (409)**
-| Código | Descrição |
+**Conflict (409)**
+| Code | Description |
 |---|---|
-| `CONFLICT-00` | modificação concorrente (`StaleDataError`, lock otimista) |
-| `CONFLICT-01` | `tax_id` duplicado |
-| `CONFLICT-02` | `passport_number` duplicado |
-| `CONFLICT-03` | exclusão de customer com orders associados |
+| `CONFLICT-00` | concurrent modification (`StaleDataError`, optimistic lock) |
+| `CONFLICT-01` | duplicate `tax_id` |
+| `CONFLICT-02` | duplicate `passport_number` |
+| `CONFLICT-03` | deleting a customer with associated orders |
 
-**Outros**
-| Código | Descrição |
+**Other**
+| Code | Description |
 |---|---|
-| `INTERNAL-00` | erro inesperado não tratado |
+| `INTERNAL-00` | unexpected, unhandled error |
 
 ## Endpoints
 
-### `/orders` (requer usuário autenticado)
+### `/orders` (requires an authenticated user)
 
-| Método | Path | Descrição |
+| Method | Path | Description |
 |---|---|---|
-| POST | `/orders` | Criar order |
-| GET | `/orders/search` | Buscar orders (query params) |
-| POST | `/orders/search` | Buscar orders (body) |
-| GET | `/orders/{order_id}` | Obter order por id |
-| DELETE | `/orders/{order_id}` | Excluir (soft) order |
-| POST | `/orders/{order_id}/items` | Adicionar item |
-| PATCH | `/orders/{order_id}/items/{item_id}` | Atualizar quantidade do item |
-| DELETE | `/orders/{order_id}/items/{item_id}` | Remover item |
-| POST | `/orders/{order_id}/confirm` | Confirmar order |
-| POST | `/orders/{order_id}/cancel` | Cancelar order |
+| POST | `/orders` | Create order |
+| GET | `/orders/search` | Search orders (query params) |
+| POST | `/orders/search` | Search orders (body) |
+| GET | `/orders/{order_id}` | Get order by id |
+| DELETE | `/orders/{order_id}` | Delete (soft) order |
+| POST | `/orders/{order_id}/items` | Add item |
+| PATCH | `/orders/{order_id}/items/{item_id}` | Update item quantity |
+| DELETE | `/orders/{order_id}/items/{item_id}` | Remove item |
+| POST | `/orders/{order_id}/confirm` | Confirm order |
+| POST | `/orders/{order_id}/cancel` | Cancel order |
 
-### `/customers` (mutações requerem `ROLE_ADMIN`; leituras requerem usuário autenticado)
+### `/customers` (mutations require `ROLE_ADMIN`; reads require an authenticated user)
 
-| Método | Path | Descrição |
+| Method | Path | Description |
 |---|---|---|
-| POST | `/customers` | Criar customer (admin) |
-| GET | `/customers/search` | Buscar customers (query params) |
-| POST | `/customers/search` | Buscar customers (body) |
-| GET | `/customers/{customer_id}` | Obter customer por id |
-| PUT | `/customers/{customer_id}` | Atualizar customer (admin) |
-| DELETE | `/customers/{customer_id}` | Excluir (soft) customer (admin) |
+| POST | `/customers` | Create customer (admin) |
+| GET | `/customers/search` | Search customers (query params) |
+| POST | `/customers/search` | Search customers (body) |
+| GET | `/customers/{customer_id}` | Get customer by id |
+| PUT | `/customers/{customer_id}` | Update customer (admin) |
+| DELETE | `/customers/{customer_id}` | Delete (soft) customer (admin) |
 
-Contrato completo (schemas de request/response) sempre disponível no OpenAPI gerado
-automaticamente pelo FastAPI: `/docs` (Swagger UI) e `/openapi.json`, desabilitados apenas
-com `APP_ENV=production`.
+The full contract (request/response schemas) is always available in the OpenAPI spec
+auto-generated by FastAPI: `/docs` (Swagger UI) and `/openapi.json`, disabled only
+when `APP_ENV=production`.
 
-## Rodando localmente
+## Running locally
 
-Requer Postgres, RabbitMQ e Mailpit — `docker compose up -d` sobe os três —, além das
-variáveis de ambiente `DATABASE_URL`, `JWT_SECRET`, `JWT_AUDIENCE`, `JWT_ISSUER`,
-`CORS_ALLOWED_ORIGINS` (obrigatória apenas com `APP_ENV=production`), `RABBITMQ_URL`
-(default `amqp://guest:guest@localhost:5672/`) e `SMTP_HOST`/`SMTP_PORT`/`SMTP_FROM`
-(default Mailpit: `localhost`/`1025`/`no-reply@order-api.local`). Mailpit web UI para
-inspecionar os e-mails recebidos: `http://localhost:8025`; RabbitMQ Management UI
-(guest/guest): `http://localhost:15672`.
+Requires Postgres, RabbitMQ and Mailpit — `docker compose up -d` starts all three —,
+plus the environment variables `DATABASE_URL`, `JWT_SECRET`, `JWT_AUDIENCE`,
+`JWT_ISSUER`, `CORS_ALLOWED_ORIGINS` (required only when `APP_ENV=production`),
+`RABBITMQ_URL` (default `amqp://guest:guest@localhost:5672/`) and `SMTP_HOST`/
+`SMTP_PORT`/`SMTP_FROM` (default Mailpit: `localhost`/`1025`/
+`no-reply@order-api.local`). Mailpit web UI to inspect received emails:
+`http://localhost:8025`; RabbitMQ Management UI (guest/guest):
+`http://localhost:15672`.
 
 ```
 docker compose up -d
 pip install -r requirements.txt
 alembic upgrade head
 uvicorn main:app --reload
-python worker.py   # processo separado: consome order.status.changed
+python worker.py   # separate process: consumes order.status.changed
 ```
 
-## Testes e qualidade
+## Tests and quality
 
-- `pytest tests/unit` — mockado, sem banco, roda em qualquer ambiente.
-- `pytest tests/integration` — Postgres real via Testcontainers, requer Docker local.
+- `pytest tests/unit` — mocked, no database, runs in any environment.
+- `pytest tests/integration` — real Postgres via Testcontainers, requires local Docker.
 
 ```
 ruff check .
 mypy api worker.py
 bandit -r api main.py database.py worker.py
-make verify   # gate local único: ruff → mypy → bandit → pytest com cobertura
+make verify   # single local gate: ruff → mypy → bandit → pytest with coverage
 ```
 
-`make verify` reproduz o `ci.yml` num único comando local. Cobertura mínima em
+`make verify` reproduces `ci.yml` in a single local command. Minimum coverage is
 `[tool.coverage.report] fail_under = 80` (`pyproject.toml`).
