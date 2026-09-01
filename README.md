@@ -13,7 +13,7 @@ controlled — see `.gitignore`).
 
 ```mermaid
 flowchart LR
-    Client -->|HTTPS| RateLimit["SlowAPIMiddleware<br/>(rate limit)"] --> Mid[Correlation / security / body-size middleware] --> JWT["get_current_user<br/>(JWT dependency)"] --> Router[orders router] --> OrderService --> Repository[SQLAlchemy Session] --> DB[(PostgreSQL)]
+    Client -->|HTTPS| RateLimit["SlowAPIMiddleware<br/>(rate limit)"] --> Mid["Correlation / security / body-size middleware"] --> JWT["get_current_user<br/>(JWT dependency)"] --> Router[orders router] --> OrderService --> Repository[SQLAlchemy Session] --> DB[(PostgreSQL)]
 ```
 
 `OrderService.confirm` / `OrderService.cancel` call `publish_order_status_changed` ⤵
