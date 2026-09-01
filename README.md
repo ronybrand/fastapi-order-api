@@ -107,6 +107,37 @@ HTTP request or the order's commit (see `api/events/rabbitmq_publisher.py`).
 |---|---|
 | `INTERNAL-00` | unexpected, unhandled error |
 
+## Request &amp; notification flow
+
+**Order create/update (synchronous)**
+
+```mermaid
+flowchart LR
+    Client -->|HTTPS| RateLimit["SlowAPIMiddleware<br/>(rate limit)"] --> Mid[Correlation / security / body-size middleware] --> JWT["get_current_user<br/>(JWT dependency)"] --> Router[orders router] --> OrderService --> Repository[SQLAlchemy Session] --> DB[(PostgreSQL)]
+```
+
+`OrderService.confirm` / `OrderService.cancel` call `publish_order_status_changed` ⤵
+
+**Notification (asynchronous)**
+
+```mermaid
+flowchart LR
+    Event[OrderStatusChangedEvent] --> Publisher[publish_to_rabbitmq] -->|publish| Queue[[RabbitMQ order.status.changed]] -->|consume| Worker[worker.py] --> Email["_send_email (smtplib)"] --> Customer([Customer inbox])
+    Worker -.->|retry / DLQ| Queue
+```
+
+`SlowAPIMiddleware` rate-limits every request first, ahead of the correlation-id,
+security-headers and body-size middlewares; JWT auth is not middleware but a FastAPI
+dependency (`get_current_user`, `python-jose`), declared on every order route and resolved
+after routing. Creating or updating an order then runs synchronously through `OrderService`
+and a SQLAlchemy `Session`, returning `201` for create and `200` for the update-style
+endpoints (`204` for delete). A status change from `confirm()` or `cancel()` (not every
+update, and only if the customer has an email) calls `publish_order_status_changed`, which
+publishes to a RabbitMQ queue after the DB commit — failures there are only logged, never
+propagated to the HTTP response. A separate `worker.py` process consumes the queue and sends
+the email via SMTP, retrying up to 3 times with a fixed 2s backoff before nacking to the DLQ.
+The two paths never block each other.
+
 ## Endpoints
 
 ### `/orders` (requires an authenticated user)
