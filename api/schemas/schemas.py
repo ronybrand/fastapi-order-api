@@ -50,12 +50,14 @@ class CustomerInput(BaseModel):
 
 
 class CustomerResponse(BaseModel):
+    # tax_id, passport_number e email nunca sao expostos aqui de proposito: sao PII e
+    # nenhum consumidor desta API precisa deles de volta na resposta (o cliente que criou
+    # o registro ja tem esses valores, e nao existe hoje um caminho de UI/integracao que
+    # precise reexibi-los). Ver api/utils/sensitive.py - mask_sensitive() cobre o caso de
+    # log, este comentario cobre o caso de resposta HTTP.
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     name: str
-    tax_id: str
-    passport_number: str | None
-    email: EmailStr
 
 
 # --- ITEM ---
