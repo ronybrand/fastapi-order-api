@@ -11,6 +11,13 @@ MAX_BODY_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 _request_id_ctx: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="-")
 
 
+def get_request_id() -> str:
+    """Le o correlation-id da requisicao atual (mesmo contextvar usado pelo
+    RequestIdFilter), para incluir no corpo de respostas de erro alem do
+    header X-Request-Id."""
+    return _request_id_ctx.get()
+
+
 class RequestIdFilter(logging.Filter):
     """Inclui o correlation-id da requisição atual em todo registro de log, sem precisar
     passá-lo manualmente em cada camada."""

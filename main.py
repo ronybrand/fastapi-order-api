@@ -4,7 +4,7 @@ import os
 from fastapi import Depends, FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
@@ -19,6 +19,7 @@ from api.security.middleware import (
     CorrelationIdMiddleware,
     RequestIdFilter,
     SecurityHeadersMiddleware,
+    get_request_id,
 )
 from api.utils.custom_api_exception import CustomAPIException
 
@@ -56,7 +57,6 @@ app = FastAPI(
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(CorrelationIdMiddleware)
@@ -71,9 +71,26 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
+    # slowapi ja devolve 429 por conta propria via detail (string com o limite excedido);
+    # so reembalamos no mesmo formato {message, code, params, request_id} usado pelo resto
+    # da aplicacao, em vez de deixar essa ser a unica resposta de erro fora do padrao.
+    content = {
+        "message": "Rate limit exceeded",
+        "code": "RATE-00",
+        "params": {"detail": str(exc.detail)},
+        "request_id": get_request_id(),
+    }
+    return JSONResponse(status_code=status.HTTP_429_TOO_MANY_REQUESTS, content=content)
+
+
 @app.exception_handler(CustomAPIException)
 async def custom_api_exception_handler(request: Request, exc: CustomAPIException):
-    return JSONResponse(status_code=exc.status_code, content=exc.detail)
+    # exc.detail e tipado como str pela base (Starlette HTTPException), mas
+    # CustomAPIException sempre passa um dict {message, code, params} em runtime.
+    content = {**exc.detail, "request_id": get_request_id()}  # type: ignore[dict-item]
+    return JSONResponse(status_code=exc.status_code, content=content)
 
 
 @app.exception_handler(RequestValidationError)
@@ -85,13 +102,19 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "message": f"{err['msg']}.",
             "code": "VALIDATION-01",
             "params": {"field": err["loc"][-1]},
+            "request_id": get_request_id(),
         }
     return JSONResponse(content=content, status_code=status.HTTP_400_BAD_REQUEST)
 
 
 @app.exception_handler(StaleDataError)
 async def stale_data_exception_handler(request: Request, exc: StaleDataError):
-    content = {"message": "Record was modified by another request", "code": "CONFLICT-00", "params": {}}
+    content = {
+        "message": "Record was modified by another request",
+        "code": "CONFLICT-00",
+        "params": {},
+        "request_id": get_request_id(),
+    }
     return JSONResponse(content=content, status_code=status.HTTP_409_CONFLICT)
 
 
@@ -102,7 +125,12 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     # detalhes internos (tipo da exceção, stack trace, mensagem) ao client — evita vazar
     # estrutura interna da aplicação em produção.
     logger.exception("unhandled_exception: path=%s method=%s", request.url.path, request.method)
-    content = {"message": "Internal server error", "code": "INTERNAL-00", "params": {}}
+    content = {
+        "message": "Internal server error",
+        "code": "INTERNAL-00",
+        "params": {},
+        "request_id": get_request_id(),
+    }
     return JSONResponse(content=content, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
