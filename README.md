@@ -133,6 +133,11 @@ HTTP request or the order's commit (see `api/events/rabbitmq_publisher.py`).
 | `CONFLICT-02` | duplicate `passport_number` |
 | `CONFLICT-03` | deleting a customer with associated orders |
 
+**Rate limit (429)**
+| Code | Description |
+|---|---|
+| `RATE-00` | too many requests (global or per-route limit exceeded) |
+
 **Other**
 | Code | Description |
 |---|---|
