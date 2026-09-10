@@ -121,3 +121,29 @@ def test_max_items_per_order_limit(client):
 
     assert response.status_code == 400
     assert response.json()["code"] == "VALIDATION-01"
+
+
+def test_order_search_via_get(client):
+    customer_id = _create_customer(client)
+    _create_order(client, customer_id)
+
+    response = client.get("/orders/search", params={"page": 0, "size": 20}, headers=auth_headers())
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["page"] == 0
+    assert body["size"] == 20
+    assert len(body["items"]) >= 1
+
+
+def test_order_search_via_post(client):
+    customer_id = _create_customer(client)
+    _create_order(client, customer_id)
+
+    response = client.post("/orders/search", json={"page": 0, "size": 20}, headers=auth_headers())
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["page"] == 0
+    assert body["size"] == 20
+    assert len(body["items"]) >= 1

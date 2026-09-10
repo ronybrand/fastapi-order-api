@@ -42,6 +42,11 @@ def create_order(
 # As rotas de busca (`/search`) precisam ser declaradas antes de `/{order_id}`: um path
 # estático depois de um dinâmico nunca é alcançado — `/orders/search` casaria com
 # `/{order_id}` (order_id="search") e falharia a validação de UUID antes de chegar aqui.
+def _search_orders(db: Session, search: SearchRequest):
+    items, total = OrderService.search(db, search)
+    return PaginatedResponse(items=items, total=total, page=search.page, size=search.size)
+
+
 @router.get(
     "/search", response_model=PaginatedResponse[OrderResponse], summary="Search orders via query params"
 )
@@ -51,8 +56,7 @@ def search_orders_get(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Searches orders using page/size/sort query params."""
-    items, total = OrderService.search(db, search)
-    return PaginatedResponse(items=items, total=total, page=search.page, size=search.size)
+    return _search_orders(db, search)
 
 
 @router.post(
@@ -64,8 +68,7 @@ def search_orders_post(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Searches orders, accepting the full `filters` payload in the request body."""
-    items, total = OrderService.search(db, search)
-    return PaginatedResponse(items=items, total=total, page=search.page, size=search.size)
+    return _search_orders(db, search)
 
 
 @router.get(
