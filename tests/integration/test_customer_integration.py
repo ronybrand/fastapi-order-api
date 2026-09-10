@@ -34,7 +34,12 @@ def test_create_and_get_customer(client):
 
     get_response = client.get(f"/customers/{customer_id}", headers=auth_headers())
     assert get_response.status_code == 200
-    assert get_response.json()["tax_id"] == "AB123456"
+    assert get_response.json()["name"] == "Ada Lovelace"
+    # tax_id/passport_number/email sao PII e nunca aparecem na resposta (ver
+    # CustomerResponse) - nem para quem acabou de criar o registro.
+    assert "tax_id" not in get_response.json()
+    assert "passport_number" not in get_response.json()
+    assert "email" not in get_response.json()
 
 
 def test_create_customer_duplicate_tax_id_returns_conflict(client):
