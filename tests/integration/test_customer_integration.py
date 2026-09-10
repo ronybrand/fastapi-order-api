@@ -95,3 +95,17 @@ def test_customer_search_via_get(client):
     assert body["page"] == 0
     assert body["size"] == 20
     assert len(body["items"]) >= 1
+
+
+def test_customer_search_via_post(client):
+    client.post("/customers", json=_customer_payload(), headers=admin_headers())
+
+    response = client.post(
+        "/customers/search", json={"page": 0, "size": 20}, headers=auth_headers()
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["page"] == 0
+    assert body["size"] == 20
+    assert len(body["items"]) >= 1

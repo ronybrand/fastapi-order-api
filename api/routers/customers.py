@@ -51,6 +51,11 @@ def create_customer(
 # resolve rotas na ordem de registro, e um path estático depois de um dinâmico nunca é
 # alcançado — `/customers/search` casaria com `/{customer_id}` (customer_id="search") e
 # falharia a validação de UUID antes de chegar aqui.
+def _search_customers(db: Session, search: SearchRequest):
+    items, total = CustomerService.search(db, search)
+    return PaginatedResponse(items=items, total=total, page=search.page, size=search.size)
+
+
 @router.get(
     "/search",
     response_model=PaginatedResponse[CustomerResponse],
@@ -63,8 +68,7 @@ def search_customers_get(
 ):
     """Searches customers using page/size/sort query params (no `filters`, use POST /search
     for filter conditions — a dict of dicts is not expressible as flat query params)."""
-    items, total = CustomerService.search(db, search)
-    return PaginatedResponse(items=items, total=total, page=search.page, size=search.size)
+    return _search_customers(db, search)
 
 
 @router.post(
@@ -78,8 +82,7 @@ def search_customers_post(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Searches customers, accepting the full `filters` payload in the request body."""
-    items, total = CustomerService.search(db, search)
-    return PaginatedResponse(items=items, total=total, page=search.page, size=search.size)
+    return _search_customers(db, search)
 
 
 @router.get(

@@ -59,6 +59,20 @@ def _touch(order: Order, current_user: CurrentUser) -> None:
     order.updated_by = current_user.id
 
 
+def _transition_status(
+    db: Session, order: Order, new_status: OrderStatus, current_user: CurrentUser, log_event: str
+) -> Order:
+    old_status = order.status
+    order.status = new_status
+    order.updated_by = current_user.id
+    db.commit()
+    db.refresh(order)
+    logger.info("%s: id=%s updated_by=%s", log_event, order.id, current_user.id)
+
+    publish_order_status_changed(build_order_status_changed_event(order, old_status))
+    return order
+
+
 class OrderService:
     @staticmethod
     def create(db: Session, order_in: OrderCreate, current_user: CurrentUser) -> Order:
@@ -175,15 +189,7 @@ class OrderService:
                 params={"id": str(order_id)},
             )
 
-        old_status = order.status
-        order.status = OrderStatus.CONFIRMED
-        order.updated_by = current_user.id
-        db.commit()
-        db.refresh(order)
-        logger.info("order_confirmed: id=%s updated_by=%s", order.id, current_user.id)
-
-        publish_order_status_changed(build_order_status_changed_event(order, old_status))
-        return order
+        return _transition_status(db, order, OrderStatus.CONFIRMED, current_user, "order_confirmed")
 
     @staticmethod
     def cancel(db: Session, order_id: UUID, current_user: CurrentUser) -> Order:
@@ -196,15 +202,7 @@ class OrderService:
                 params={"id": str(order_id), "status": order.status.value},
             )
 
-        old_status = order.status
-        order.status = OrderStatus.CANCELED
-        order.updated_by = current_user.id
-        db.commit()
-        db.refresh(order)
-        logger.info("order_canceled: id=%s updated_by=%s", order.id, current_user.id)
-
-        publish_order_status_changed(build_order_status_changed_event(order, old_status))
-        return order
+        return _transition_status(db, order, OrderStatus.CANCELED, current_user, "order_canceled")
 
     @staticmethod
     def search(db: Session, request: SearchRequest) -> tuple[list[Order], int]:

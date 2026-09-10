@@ -109,6 +109,25 @@ def test_confirm_happy_path_transitions_to_confirmed():
     mock_db.commit.assert_called_once()
 
 
+def test_confirm_publishes_status_changed_event_with_old_status():
+    customer = Customer(id=uuid4(), email="a@example.com", name="Ada")
+    order = Order(
+        id=uuid4(),
+        status=OrderStatus.OPEN,
+        items=[Item(id=uuid4(), unit_price=Decimal("1"), quantity=1)],
+        customer=customer,
+    )
+    mock_db = _mock_db_with_order(order)
+
+    with patch("api.services.order_service.publish_order_status_changed") as mock_publish:
+        OrderService.confirm(mock_db, order.id, CURRENT_USER)
+
+    mock_publish.assert_called_once()
+    (event,) = mock_publish.call_args[0]
+    assert event.old_status == OrderStatus.OPEN
+    assert event.new_status == OrderStatus.CONFIRMED
+
+
 def test_cancel_fails_when_already_canceled():
     order = Order(id=uuid4(), status=OrderStatus.CANCELED, items=[])
     mock_db = _mock_db_with_order(order)
@@ -128,6 +147,20 @@ def test_cancel_happy_path_from_open():
     result = OrderService.cancel(mock_db, order.id, CURRENT_USER)
 
     assert result.status == OrderStatus.CANCELED
+
+
+def test_cancel_publishes_status_changed_event_with_old_status():
+    customer = Customer(id=uuid4(), email="a@example.com", name="Ada")
+    order = Order(id=uuid4(), status=OrderStatus.CONFIRMED, items=[], customer=customer)
+    mock_db = _mock_db_with_order(order)
+
+    with patch("api.services.order_service.publish_order_status_changed") as mock_publish:
+        OrderService.cancel(mock_db, order.id, CURRENT_USER)
+
+    mock_publish.assert_called_once()
+    (event,) = mock_publish.call_args[0]
+    assert event.old_status == OrderStatus.CONFIRMED
+    assert event.new_status == OrderStatus.CANCELED
 
 
 def test_search_eager_loads_items_to_avoid_n_plus_one():
