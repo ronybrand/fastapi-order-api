@@ -12,6 +12,23 @@ def _customer_payload(**overrides):
     return payload
 
 
+def test_create_customer_is_rate_limited_tighter_than_the_global_default(client):
+    # POST /customers tem limite proprio de 10/minute (ver customers.py), mais apertado
+    # que o default global de 100/minute - as 10 primeiras passam (podem falhar por outro
+    # motivo, tanto faz), a 11a tem que ser 429 especificamente por rate limit.
+    for _ in range(10):
+        client.post(
+            "/customers", json=_customer_payload(tax_id=f"RATE-{_}"), headers=admin_headers()
+        )
+
+    response = client.post(
+        "/customers", json=_customer_payload(tax_id="RATE-OVER-LIMIT"), headers=admin_headers()
+    )
+
+    assert response.status_code == 429
+    assert response.json()["code"] == "RATE-00"
+
+
 def test_create_customer_requires_admin_role(client):
     response = client.post("/customers", json=_customer_payload(), headers=auth_headers())
     assert response.status_code == 403

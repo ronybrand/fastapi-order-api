@@ -6,6 +6,7 @@ from testcontainers.community.postgres import PostgresContainer
 
 from api.dependencies.dependencies import get_db
 from api.models.models import Base
+from api.security.rate_limit import limiter
 from main import app
 
 
@@ -54,6 +55,15 @@ def override_get_db(db_session):
     app.dependency_overrides[get_db] = _override
     yield
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    # O Limiter e um singleton compartilhado pelo processo inteiro de teste (mesmo
+    # storage em memoria entre todos os TestClient, que compartilham o mesmo IP de
+    # cliente) - sem isso, limites apertados por rota vazariam de um teste pro outro.
+    limiter.reset()
+    yield
 
 
 @pytest.fixture

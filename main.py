@@ -4,10 +4,8 @@ import os
 from fastapi import Depends, FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from slowapi.util import get_remote_address
 from sqlalchemy import text
 from sqlalchemy.orm.exc import StaleDataError
 from starlette.middleware.cors import CORSMiddleware
@@ -21,6 +19,7 @@ from api.security.middleware import (
     SecurityHeadersMiddleware,
     get_request_id,
 )
+from api.security.rate_limit import limiter
 from api.utils.custom_api_exception import CustomAPIException
 
 _SAFE_DEFAULT_ENVS = {"development", "test"}
@@ -55,7 +54,6 @@ app = FastAPI(
     openapi_url=None if IS_PRODUCTION else "/openapi.json",
 )
 
-limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 app.state.limiter = limiter
 
 app.add_middleware(SlowAPIMiddleware)

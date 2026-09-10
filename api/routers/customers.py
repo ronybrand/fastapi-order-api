@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, Path, Request
 from sqlalchemy.orm import Session
 
 from api.dependencies.dependencies import CurrentUser, get_current_user, get_db, require_role
@@ -11,10 +11,16 @@ from api.schemas.schemas import (
     PaginatedResponse,
     SearchRequest,
 )
+from api.security.rate_limit import limiter
 from api.security.roles import ROLE_ADMIN
 from api.services.customer_service import CustomerService
 
 router = APIRouter(prefix="/customers", tags=["customers"])
+
+# Mais apertado que o default global (100/minute, ver main.py): escrita em Customer é
+# PII-adjacente (tax_id/passport_number/email) e mais custosa que leitura, então merece
+# um teto próprio, não compartilhar o mesmo bucket genérico do resto da API.
+WRITE_RATE_LIMIT = "10/minute"
 
 
 @router.post(
@@ -30,7 +36,9 @@ router = APIRouter(prefix="/customers", tags=["customers"])
         },
     },
 )
+@limiter.limit(WRITE_RATE_LIMIT)
 def create_customer(
+    request: Request,
     customer: CustomerInput,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_role(ROLE_ADMIN)),
@@ -102,7 +110,9 @@ def get_customer(
         },
     },
 )
+@limiter.limit(WRITE_RATE_LIMIT)
 def update_customer(
+    request: Request,
     customer: CustomerInput,
     customer_id: UUID = Path(...),
     db: Session = Depends(get_db),
@@ -121,7 +131,9 @@ def update_customer(
         409: {"model": DefaultErrorResponse, "description": "CONFLICT-03 (customer has orders)"},
     },
 )
+@limiter.limit(WRITE_RATE_LIMIT)
 def delete_customer(
+    request: Request,
     customer_id: UUID = Path(...),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_role(ROLE_ADMIN)),
