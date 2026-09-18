@@ -145,6 +145,11 @@ HTTP request or the order's commit (see `api/events/rabbitmq_publisher.py`).
 |---|---|
 | `INTERNAL-00` | unexpected, unhandled error |
 
+## Architecture decisions
+
+Non-obvious technical decisions (and the alternatives considered) are logged in
+[`docs/adr/`](./docs/adr/README.md) as Architecture Decision Records.
+
 ## Endpoints
 
 ### `/orders` (requires an authenticated user)
