@@ -5,9 +5,9 @@
 
 [API docs](https://ronybrand.github.io/fastapi-order-api)
 
-Order Management domain implementation in FastAPI, following the conventions described
-in the `fastapi-feature` skill (`.claude/skills/fastapi-feature/SKILL.md`, not version
-controlled — see `.gitignore`).
+Order Management domain implementation in FastAPI, specified in [`DOMAIN.md`](./DOMAIN.md) and
+following the conventions described in the `fastapi-feature` skill
+(`.claude/skills/fastapi-feature/SKILL.md`, not version controlled — see `.gitignore`).
 
 ## Request &amp; notification flow
 
