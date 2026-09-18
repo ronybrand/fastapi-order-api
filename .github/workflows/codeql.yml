@@ -10,6 +10,7 @@ on:
 jobs:
   analyze:
     runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
     permissions:
       security-events: write
     steps:
