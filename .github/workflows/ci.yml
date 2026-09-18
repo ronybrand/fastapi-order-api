@@ -66,3 +66,51 @@ jobs:
       - run: alembic check
         env:
           DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/orders
+
+  # Gera um snapshot estatico do OpenAPI spec - nao existe deploy live desta API pra
+  # navegar em /docs (main.py desabilita docs_url/redoc_url/openapi_url em producao).
+  # scripts/export_openapi.py so importa `app` e chama app.openapi() em processo, sem
+  # subir servidor nem banco - por isso este job nao precisa de Postgres/services.
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python scripts/export_openapi.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openapi-spec
+          path: dist-openapi/openapi.json
+          if-no-files-found: error
+          retention-days: 7
+
+  # Publica o snapshot como pagina Redoc - a unica forma de ver o formato da API sem
+  # clonar o repo. So em push pra main. O environment/permissions `github-pages` aqui e
+  # o contrato exigido pelo proprio actions/deploy-pages, sem relacao com OIDC/AWS.
+  pages:
+    needs: docs
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          name: openapi-spec
+          path: site
+      - run: cp docs/api-docs/index.html site/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - uses: actions/deploy-pages@v4
+        id: deployment
