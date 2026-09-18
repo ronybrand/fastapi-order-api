@@ -3,6 +3,8 @@
 [![CI](https://github.com/ronybrand/fastapi-order-api/actions/workflows/ci.yml/badge.svg)](https://github.com/ronybrand/fastapi-order-api/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/ronybrand/fastapi-order-api/actions/workflows/codeql.yml/badge.svg)](https://github.com/ronybrand/fastapi-order-api/actions/workflows/codeql.yml)
 
+[API docs](https://ronybrand.github.io/nest-order-api)
+
 Order Management domain implementation in FastAPI, following the conventions described
 in the `fastapi-feature` skill (`.claude/skills/fastapi-feature/SKILL.md`, not version
 controlled — see `.gitignore`).
