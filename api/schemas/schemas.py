@@ -28,6 +28,7 @@ class FilterOperator(StrEnum):
 
 
 class SearchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     page: int = Field(default=0, ge=0)
     size: int = Field(default=20, ge=1, le=100)
     sort: str | None = None
@@ -43,6 +44,7 @@ class PaginatedResponse[T](BaseModel):
 
 # --- CUSTOMER ---
 class CustomerInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1)
     tax_id: str = Field(pattern=r"^[A-Za-z0-9./-]{5,20}$")
     passport_number: str | None = Field(default=None, pattern=r"^[A-Z0-9]{6,9}$")
@@ -62,6 +64,7 @@ class CustomerResponse(BaseModel):
 
 # --- ITEM ---
 class ItemInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     description: str = Field(min_length=1, max_length=255)
     unit_price: Decimal = Field(gt=0)
     quantity: int = Field(gt=0)
@@ -83,6 +86,7 @@ class ItemInput(BaseModel):
 
 
 class ItemQuantityUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     quantity: int = Field(gt=0)
 
 
@@ -98,6 +102,7 @@ class ItemResponse(BaseModel):
 
 # --- ORDER ---
 class OrderCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     customer_id: UUID
     items: list[ItemInput] = Field(default_factory=list, max_length=MAX_ITEMS_PER_ORDER)
 
