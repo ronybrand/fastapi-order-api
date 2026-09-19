@@ -31,5 +31,14 @@ disable_error_code = ["misc", "valid-type", "var-annotated", "return-value"]
 module = ["api.services.*", "api.utils.pagination"]
 disable_error_code = ["assignment", "attr-defined", "arg-type", "union-attr", "operator"]
 
+[tool.coverage.run]
+# nest-order-api measures branch coverage (85% gate) alongside statements; this project's gate
+# only tracked statements before, letting real branch gaps (e.g. an untested `if`/`else` arm)
+# go unnoticed even at 100% statement coverage. Measured now the same way.
+branch = true
+
 [tool.coverage.report]
-fail_under = 80
+# Actual coverage with branches counted is ~99% (verified after closing the gaps this raise
+# assumes are closed - see the PR that bumped this from 80). 90 leaves real headroom without
+# being a rubber-stamp number, matching nest-order-api's line/statement gate.
+fail_under = 90
