@@ -123,6 +123,26 @@ def test_max_items_per_order_limit(client):
     assert response.json()["code"] == "VALIDATION-01"
 
 
+def test_get_order_by_id(client):
+    customer_id = _create_customer(client)
+    order = _create_order(client, customer_id)
+
+    response = client.get(f"/orders/{order['id']}", headers=auth_headers())
+
+    assert response.status_code == 200
+    assert response.json()["id"] == order["id"]
+
+
+def test_delete_order(client):
+    customer_id = _create_customer(client)
+    order = _create_order(client, customer_id)
+
+    response = client.delete(f"/orders/{order['id']}", headers=auth_headers())
+
+    assert response.status_code == 204
+    assert client.get(f"/orders/{order['id']}", headers=auth_headers()).status_code == 404
+
+
 def test_order_search_via_get(client):
     customer_id = _create_customer(client)
     _create_order(client, customer_id)

@@ -85,6 +85,41 @@ def test_delete_customer_blocked_when_has_order(client):
     assert response.json()["code"] == "CONFLICT-03"
 
 
+def test_update_customer(client):
+    customer_id = client.post(
+        "/customers", json=_customer_payload(), headers=admin_headers()
+    ).json()["id"]
+
+    response = client.put(
+        f"/customers/{customer_id}",
+        json=_customer_payload(name="Ada Lovelace Byron"),
+        headers=admin_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Ada Lovelace Byron"
+
+
+def test_update_customer_duplicate_passport_returns_conflict(client):
+    client.post(
+        "/customers",
+        json=_customer_payload(tax_id="TAX-OTHER", passport_number="P123456"),
+        headers=admin_headers(),
+    )
+    customer_id = client.post(
+        "/customers", json=_customer_payload(), headers=admin_headers()
+    ).json()["id"]
+
+    response = client.put(
+        f"/customers/{customer_id}",
+        json=_customer_payload(passport_number="P123456"),
+        headers=admin_headers(),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "CONFLICT-02"
+
+
 def test_customer_search_via_get(client):
     client.post("/customers", json=_customer_payload(), headers=admin_headers())
 

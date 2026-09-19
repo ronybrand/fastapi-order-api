@@ -52,6 +52,16 @@ agrupam o histórico por tema, não por tag.
 - Handler global para exceções não tratadas: loga stack trace com `request_id`, devolve só
   `{"code": "INTERNAL-00"}` ao client, sem vazar detalhes internos.
 
+### Changed
+
+- Gate de cobertura sobe de 80% (só statements) para 90%, agora medindo branch coverage
+  também (`[tool.coverage.run] branch = true`) — cobertura real já estava em ~99% com
+  branches contados; o número antigo só não refletia isso. Fechados os poucos gaps reais
+  restantes: rollback em `get_db()`, token sem `sub`, filtro/sort por campo desconhecido em
+  `paginate()`, validators de `ItemInput` (descrição em branco, mais de 2 casas decimais) e
+  os endpoints `PUT /customers/{id}` e `GET`/`DELETE /orders/{id}`, que não tinham nenhum
+  teste de integração próprio.
+
 ### Security
 
 - JWT validado com chave pública RSA (`JWT_PUBLIC_KEY_PATH`, RS256) em vez de segredo HS256

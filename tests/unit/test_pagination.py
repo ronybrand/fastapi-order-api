@@ -88,3 +88,34 @@ def test_filter_with_in_operator_and_invalid_list_value_raises_validation_error(
 
     assert exc.value.status_code == 400
     assert exc.value.detail["code"] == "VALIDATION-05"
+
+
+def test_filter_on_unknown_field_is_silently_ignored(db_session):
+    _make_widget(db_session, score=1)
+    _make_widget(db_session, score=2)
+
+    request = SearchRequest(filters={"not_a_real_column": [{"op": "eq", "value": "x"}]})
+    items, total = paginate(db_session.query(_Widget), _Widget, request)
+
+    assert total == 2
+
+
+def test_sort_on_unknown_field_raises_validation_error(db_session):
+    request = SearchRequest(sort="not_a_real_column")
+
+    with pytest.raises(CustomAPIException) as exc:
+        paginate(db_session.query(_Widget), _Widget, request)
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail["code"] == "VALIDATION-06"
+
+
+def test_sort_descending_orders_highest_score_first(db_session):
+    _make_widget(db_session, score=1)
+    highest = _make_widget(db_session, score=10)
+    _make_widget(db_session, score=5)
+
+    request = SearchRequest(sort="-score")
+    items, _total = paginate(db_session.query(_Widget), _Widget, request)
+
+    assert items[0].id == highest.id
