@@ -54,8 +54,13 @@ agrupam o histórico por tema, não por tag.
 
 ### Security
 
-- Aplicação falha o startup (fail-closed) se `APP_ENV`/`JWT_SECRET` estiverem ausentes ou
-  com o valor default fora de `development`/`test`.
+- JWT validado com chave pública RSA (`JWT_PUBLIC_KEY_PATH`, RS256) em vez de segredo HS256
+  compartilhado — um vazamento não permite mais forjar token novo, só verificar os já
+  emitidos (ver ADR 0004, que supersede a ADR 0003). Aplicação falha o startup
+  (fail-closed) se `JWT_PUBLIC_KEY_PATH` estiver ausente, em qualquer ambiente.
+- Schemas de request (`CustomerInput`, `ItemInput`, `ItemQuantityUpdate`, `OrderCreate`,
+  `SearchRequest`) agora rejeitam campo desconhecido no body (`extra="forbid"`) em vez de
+  ignorá-lo silenciosamente.
 - `jinja2` atualizado para 3.1.6, corrigindo bypass de sandbox no filtro `|attr`
   ([GHSA-cpwx-vrp4-4pq7](https://github.com/pallets/jinja/security/advisories/GHSA-cpwx-vrp4-4pq7)).
 - bandit (SAST) e CodeQL adicionados ao CI.

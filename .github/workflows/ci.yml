@@ -106,7 +106,15 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+      # Importing main.app (export_openapi.py does this to call app.openapi()) now requires
+      # JWT_PUBLIC_KEY_PATH (see ADR 0004) - any syntactically valid RSA public key works here,
+      # this job never mints or verifies a real token, it only introspects route metadata.
+      - run: |
+          openssl genrsa -out /tmp/jwt-private.pem 2048
+          openssl rsa -in /tmp/jwt-private.pem -pubout -out /tmp/jwt-public.pem
       - run: python scripts/export_openapi.py
+        env:
+          JWT_PUBLIC_KEY_PATH: /tmp/jwt-public.pem
       - uses: actions/upload-artifact@v4
         with:
           name: openapi-spec

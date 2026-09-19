@@ -185,7 +185,7 @@ when `APP_ENV=production`.
 ## Running locally
 
 Requires Postgres, RabbitMQ and Mailpit — `docker compose up -d` starts all three —,
-plus the environment variables `DATABASE_URL`, `JWT_SECRET`, `JWT_AUDIENCE`,
+plus the environment variables `DATABASE_URL`, `JWT_PUBLIC_KEY_PATH`, `JWT_AUDIENCE`,
 `JWT_ISSUER`, `CORS_ALLOWED_ORIGINS` (required only when `APP_ENV=production`),
 `RABBITMQ_URL` (default `amqp://guest:guest@localhost:5672/`) and `SMTP_HOST`/
 `SMTP_PORT`/`SMTP_FROM` (default Mailpit: `localhost`/`1025`/
