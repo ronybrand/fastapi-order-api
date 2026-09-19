@@ -5,4 +5,5 @@ alternatives discarded, and consequences (including the ones left deliberately u
 
 - [0001 — Binary RBAC (authenticated user vs admin), not per-resource permissions](0001-binary-rbac-admin-user.md)
 - [0002 — Synchronous, in-request best-effort publish, not a transactional outbox](0002-no-transactional-outbox.md)
-- [0003 — Validate JWTs with a shared HS256 secret, not OIDC discovery against Keycloak](0003-hs256-shared-secret-jwt.md)
+- [0003 — Validate JWTs with a shared HS256 secret, not OIDC discovery against Keycloak](0003-hs256-shared-secret-jwt.md) *(superseded by 0004)*
+- [0004 — Validate JWTs against a local RSA public key, not a shared HS256 secret](0004-rs256-public-key-jwt.md)

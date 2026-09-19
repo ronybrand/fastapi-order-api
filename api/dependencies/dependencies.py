@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -8,22 +9,22 @@ from jose import JWTError, jwt
 from api.security.roles import ROLE_USER
 from database import SessionLocal
 
-# Sentinela de dev/test, não um segredo real — o guard abaixo falha o startup se este
-# valor sobreviver fora de development/test (ver JWT_SECRET fail-fast guard).
-_DEFAULT_JWT_SECRET = "insecure-dev-secret-change-me"  # nosec B105
-JWT_SECRET = os.environ.get("JWT_SECRET", _DEFAULT_JWT_SECRET)
-JWT_ALGORITHM = "HS256"
+# This service only verifies tokens - it never issues them (no /auth/login endpoint here).
+# JWT_PUBLIC_KEY_PATH must point at the public half of whatever key pair the real token
+# issuer signs with (RS256). Unlike the shared HS256 secret this replaced (see ADR 0003),
+# leaking this file grants no ability to mint tokens, only to verify them - so there is no
+# "insecure default" to fail-fast against here: an unset path just can't work at all, in
+# every environment, and fails loudly for that reason instead.
+JWT_PUBLIC_KEY_PATH = os.environ.get("JWT_PUBLIC_KEY_PATH")
+if JWT_PUBLIC_KEY_PATH is None:
+    raise RuntimeError(
+        "JWT_PUBLIC_KEY_PATH must be set - this service only verifies tokens (RS256), it never issues them"
+    )
+
+JWT_PUBLIC_KEY = Path(JWT_PUBLIC_KEY_PATH).read_bytes()
+JWT_ALGORITHM = "RS256"
 JWT_AUDIENCE = os.environ.get("JWT_AUDIENCE", "fastapi-order-api")
 JWT_ISSUER = os.environ.get("JWT_ISSUER", "fastapi-order-api")
-
-# Mesma política do CORS em main.py, mas com allowlist em vez de blocklist: um APP_ENV
-# esquecido ou desconhecido (ex.: variável não propagada pelo orquestrador) deve falhar
-# fechado, não abrir a porta pro segredo default hardcoded no código-fonte, que permitiria
-# forjar qualquer token válido.
-_SAFE_DEFAULT_SECRET_ENVS = {"development", "test"}
-_app_env_is_unsafe = os.environ.get("APP_ENV", "development") not in _SAFE_DEFAULT_SECRET_ENVS
-if _app_env_is_unsafe and JWT_SECRET == _DEFAULT_JWT_SECRET:
-    raise RuntimeError("JWT_SECRET must be set to a non-default value outside development/test")
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -56,7 +57,7 @@ def get_current_user(
     try:
         payload = jwt.decode(
             credentials.credentials,
-            JWT_SECRET,
+            JWT_PUBLIC_KEY,
             algorithms=[JWT_ALGORITHM],
             audience=JWT_AUDIENCE,
             issuer=JWT_ISSUER,

@@ -1,7 +1,8 @@
 from jose import jwt
 
-from api.dependencies.dependencies import JWT_ALGORITHM, JWT_AUDIENCE, JWT_ISSUER, JWT_SECRET
+from api.dependencies.dependencies import JWT_ALGORITHM, JWT_AUDIENCE, JWT_ISSUER
 from api.security.roles import ROLE_ADMIN, ROLE_USER
+from tests.utils.jwt_keys import PRIVATE_KEY_PEM
 
 
 def build_token(subject: str = "test-user", roles: list[str] | None = None, **overrides) -> str:
@@ -12,7 +13,7 @@ def build_token(subject: str = "test-user", roles: list[str] | None = None, **ov
         "iss": JWT_ISSUER,
     }
     payload.update(overrides)
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return jwt.encode(payload, PRIVATE_KEY_PEM, algorithm=JWT_ALGORITHM)
 
 
 def auth_headers(subject: str = "test-user", roles: list[str] | None = None) -> dict:
@@ -26,7 +27,7 @@ def admin_headers(subject: str = "test-admin") -> dict:
 def invalid_audience_headers(subject: str = "test-user") -> dict:
     token = jwt.encode(
         {"sub": subject, "roles": [ROLE_USER], "aud": "wrong-audience", "iss": JWT_ISSUER},
-        JWT_SECRET,
+        PRIVATE_KEY_PEM,
         algorithm=JWT_ALGORITHM,
     )
     return {"Authorization": f"Bearer {token}"}

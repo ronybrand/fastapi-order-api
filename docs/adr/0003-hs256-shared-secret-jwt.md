@@ -1,7 +1,10 @@
 # ADR 0003: Validate JWTs with a shared HS256 secret, not OIDC discovery against Keycloak
 
 ## Status
-Accepted
+Superseded by [ADR 0004](./0004-rs256-public-key-jwt.md) - a red-team-style review across the
+three `order-api` ports flagged the "single point of compromise" trade-off accepted below as worth
+closing given how cheap the fix was (no new external dependency, `cryptography` already present
+transitively via `python-jose[cryptography]`). Kept here for the historical reasoning.
 
 ## Context
 `spring-order-api` runs a real Keycloak and does OIDC discovery against it
