@@ -3,10 +3,10 @@ import os
 import sys
 from unittest.mock import MagicMock
 
+import jwt
 import pytest
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
-from jose import jwt
 
 from tests.utils.jwt_keys import PRIVATE_KEY_PEM
 

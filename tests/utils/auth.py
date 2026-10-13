@@ -1,4 +1,4 @@
-from jose import jwt
+import jwt
 
 from api.dependencies.dependencies import JWT_ALGORITHM, JWT_AUDIENCE, JWT_ISSUER
 from api.security.roles import ROLE_ADMIN, ROLE_USER

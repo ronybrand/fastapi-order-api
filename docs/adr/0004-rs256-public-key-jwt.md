@@ -11,7 +11,8 @@ public-key-only approach, at the cost of this service being able to *mint* token
 `order-api` ports flagged that trade-off as the most severe finding of the three implementations
 specifically because it was the one closable at near-zero cost: `cryptography` (needed to generate/
 handle RSA keys) is already a transitive dependency via `python-jose[cryptography]==3.5.0`, no new
-package required.
+package required. (Later superseded: python-jose was replaced by `pyjwt[crypto]` after
+GHSA-3qf3-8w2g-rqmx, which has no patched python-jose release.)
 
 ## Decision
 Replace `JWT_SECRET` (HS256) with `JWT_PUBLIC_KEY_PATH` (RS256, verify-only), mirroring
