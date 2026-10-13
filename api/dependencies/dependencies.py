@@ -2,9 +2,9 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
 
 from api.security.roles import ROLE_USER
 from database import SessionLocal
@@ -62,7 +62,7 @@ def get_current_user(
             audience=JWT_AUDIENCE,
             issuer=JWT_ISSUER,
         )
-    except JWTError as exc:
+    except jwt.PyJWTError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
 
     subject = payload.get("sub")

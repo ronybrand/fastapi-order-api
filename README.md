@@ -30,7 +30,7 @@ flowchart LR
 
 `SlowAPIMiddleware` rate-limits every request first, ahead of the correlation-id,
 security-headers and body-size middlewares; JWT auth is not middleware but a FastAPI
-dependency (`get_current_user`, `python-jose`), declared on every order route and resolved
+dependency (`get_current_user`, `PyJWT`), declared on every order route and resolved
 after routing. Creating or updating an order then runs synchronously through `OrderService`
 and a SQLAlchemy `Session`, returning `201` for create and `200` for the update-style
 endpoints (`204` for delete). A status change from `confirm()` or `cancel()` (not every
