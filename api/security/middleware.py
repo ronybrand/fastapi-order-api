@@ -2,6 +2,7 @@ import contextvars
 import logging
 import uuid
 
+from starlette.datastructures import Headers
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -65,36 +66,65 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
-class BodySizeLimitMiddleware(BaseHTTPMiddleware):
-    """Rejeita (413) requisições cujo Content-Length declarado excede o teto, antes do corpo
-    ser lido/desserializado pelo Pydantic — evita alocar memória para um payload gigante."""
+class RequestBodyTooLarge(Exception):
+    """Levantada de dentro do `receive` quando o corpo ja lido passa do teto (upload em chunks, sem
+    Content-Length): vira 413 pelo handler registrado em main.py."""
+
+
+def _error_body(message: str, code: str, params: dict) -> dict:
+    return {"message": message, "code": code, "params": params, "request_id": get_request_id()}
+
+
+def _too_large_body(max_bytes: int) -> dict:
+    return _error_body("Request body too large", "VALIDATION-08", {"max_bytes": max_bytes})
+
+
+async def request_body_too_large_handler(request: Request, exc: RequestBodyTooLarge):
+    return JSONResponse(status_code=413, content=_too_large_body(MAX_BODY_SIZE_BYTES))
+
+
+class BodySizeLimitMiddleware:
+    """Limita o tamanho do corpo da requisicao. Content-Length declarado acima do teto (ou invalido) e
+    recusado antes de qualquer leitura; sem Content-Length (Transfer-Encoding: chunked) os bytes sao
+    contados conforme chegam e a leitura e interrompida ao passar do teto - so olhar o header deixaria
+    um upload em chunks fugir do limite. ASGI puro (nao BaseHTTPMiddleware) para poder embrulhar o
+    `receive`."""
 
     def __init__(self, app, max_body_size: int = MAX_BODY_SIZE_BYTES):
-        super().__init__(app)
+        self.app = app
         self.max_body_size = max_body_size
 
-    async def dispatch(self, request: Request, call_next):
-        content_length = request.headers.get("content-length")
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        content_length = Headers(scope=scope).get("content-length")
         if content_length is not None:
             # int() on a non-numeric header used to raise (an unhandled 500).
             if not content_length.isascii() or not content_length.isdigit():
-                return JSONResponse(
+                response = JSONResponse(
                     status_code=400,
-                    content={
-                        "message": "Invalid Content-Length header",
-                        "code": "VALIDATION-01",
-                        "params": {"field": "content-length"},
-                        "request_id": get_request_id(),
-                    },
+                    content=_error_body(
+                        "Invalid Content-Length header", "VALIDATION-01", {"field": "content-length"}
+                    ),
                 )
+                await response(scope, receive, send)
+                return
             if int(content_length) > self.max_body_size:
-                return JSONResponse(
-                    status_code=413,
-                    content={
-                        "message": "Request body too large",
-                        "code": "VALIDATION-08",
-                        "params": {"max_bytes": self.max_body_size},
-                        "request_id": get_request_id(),
-                    },
-                )
-        return await call_next(request)
+                response = JSONResponse(status_code=413, content=_too_large_body(self.max_body_size))
+                await response(scope, receive, send)
+                return
+
+        received = 0
+
+        async def limited_receive():
+            nonlocal received
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > self.max_body_size:
+                    raise RequestBodyTooLarge
+            return message
+
+        await self.app(scope, limited_receive, send)
