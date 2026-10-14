@@ -2,12 +2,14 @@ import logging
 import os
 
 from fastapi import Depends, FastAPI, Request, status
+from fastapi.exception_handlers import http_exception_handler as default_http_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm.exc import StaleDataError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
 
 from api.dependencies.dependencies import get_db
@@ -89,6 +91,24 @@ async def custom_api_exception_handler(request: Request, exc: CustomAPIException
     # CustomAPIException sempre passa um dict {message, code, params} em runtime.
     content = {**exc.detail, "request_id": get_request_id()}  # type: ignore[dict-item]
     return JSONResponse(status_code=exc.status_code, content=content)
+
+
+_AUTH_ERRORS = {
+    status.HTTP_401_UNAUTHORIZED: ("Authentication required", "AUTH-01"),
+    status.HTTP_403_FORBIDDEN: ("Access denied", "AUTH-02"),
+}
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    # 401/403 come from the auth dependencies as plain HTTPException; they get the same
+    # {message, code, params, request_id} body as every other error instead of {"detail": ...}.
+    # The detail ("Invalid token", "Insufficient role") is deliberately not echoed to the client.
+    if exc.status_code in _AUTH_ERRORS:
+        message, code = _AUTH_ERRORS[exc.status_code]
+        content = {"message": message, "code": code, "params": {}, "request_id": get_request_id()}
+        return JSONResponse(status_code=exc.status_code, content=content, headers=exc.headers)
+    return await default_http_exception_handler(request, exc)
 
 
 @app.exception_handler(RequestValidationError)

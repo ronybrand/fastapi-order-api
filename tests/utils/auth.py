@@ -1,3 +1,5 @@
+import time
+
 import jwt
 
 from api.dependencies.dependencies import JWT_ALGORITHM, JWT_AUDIENCE, JWT_ISSUER
@@ -11,6 +13,7 @@ def build_token(subject: str = "test-user", roles: list[str] | None = None, **ov
         "roles": roles if roles is not None else [ROLE_USER],
         "aud": JWT_AUDIENCE,
         "iss": JWT_ISSUER,
+        "exp": int(time.time()) + 3600,
     }
     payload.update(overrides)
     return jwt.encode(payload, PRIVATE_KEY_PEM, algorithm=JWT_ALGORITHM)
@@ -26,7 +29,13 @@ def admin_headers(subject: str = "test-admin") -> dict:
 
 def invalid_audience_headers(subject: str = "test-user") -> dict:
     token = jwt.encode(
-        {"sub": subject, "roles": [ROLE_USER], "aud": "wrong-audience", "iss": JWT_ISSUER},
+        {
+            "sub": subject,
+            "roles": [ROLE_USER],
+            "aud": "wrong-audience",
+            "iss": JWT_ISSUER,
+            "exp": int(time.time()) + 3600,
+        },
         PRIVATE_KEY_PEM,
         algorithm=JWT_ALGORITHM,
     )

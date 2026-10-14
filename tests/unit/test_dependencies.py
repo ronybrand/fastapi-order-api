@@ -1,6 +1,7 @@
 import importlib
 import os
 import sys
+import time
 from unittest.mock import MagicMock
 
 import jwt
@@ -71,7 +72,7 @@ def test_get_current_user_rejects_token_without_subject():
     from api.dependencies.dependencies import JWT_AUDIENCE, JWT_ISSUER, get_current_user
 
     token = jwt.encode(
-        {"roles": ["USER"], "aud": JWT_AUDIENCE, "iss": JWT_ISSUER},
+        {"roles": ["USER"], "aud": JWT_AUDIENCE, "iss": JWT_ISSUER, "exp": int(time.time()) + 3600},
         PRIVATE_KEY_PEM,
         algorithm="RS256",
     )

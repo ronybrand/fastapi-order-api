@@ -2,6 +2,7 @@ import asyncio
 import json
 from unittest.mock import Mock
 
+from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy.orm.exc import StaleDataError
@@ -10,6 +11,7 @@ from api.security.middleware import _request_id_ctx
 from api.utils.custom_api_exception import CustomAPIException
 from main import (
     custom_api_exception_handler,
+    http_exception_handler,
     rate_limit_exceeded_handler,
     stale_data_exception_handler,
     unhandled_exception_handler,
@@ -108,3 +110,42 @@ def test_request_id_defaults_to_placeholder_outside_a_request_context():
 
     body = json.loads(response.body)
     assert body["request_id"] == "-"
+
+
+def test_401_uses_the_app_error_shape_and_keeps_the_www_authenticate_header():
+    token = _request_id_ctx.set("req-401")
+    try:
+        exc = HTTPException(401, detail="Invalid token", headers={"WWW-Authenticate": "Bearer"})
+        response = _run(http_exception_handler(_fake_request(), exc))
+    finally:
+        _request_id_ctx.reset(token)
+
+    body = json.loads(response.body)
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+    assert body == {
+        "message": "Authentication required",
+        "code": "AUTH-01",
+        "params": {},
+        "request_id": "req-401",
+    }
+
+
+def test_403_uses_the_app_error_shape_without_revealing_the_missing_role():
+    token = _request_id_ctx.set("req-403")
+    try:
+        exc = HTTPException(403, detail="Insufficient role")
+        response = _run(http_exception_handler(_fake_request(), exc))
+    finally:
+        _request_id_ctx.reset(token)
+
+    body = json.loads(response.body)
+    assert response.status_code == 403
+    assert body == {"message": "Access denied", "code": "AUTH-02", "params": {}, "request_id": "req-403"}
+
+
+def test_other_http_exceptions_keep_the_framework_default_response():
+    response = _run(http_exception_handler(_fake_request(), HTTPException(405, detail="Method Not Allowed")))
+
+    assert response.status_code == 405
+    assert json.loads(response.body) == {"detail": "Method Not Allowed"}
