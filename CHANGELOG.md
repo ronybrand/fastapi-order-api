@@ -8,6 +8,10 @@ agrupam o histórico por tema, não por tag.
 
 ### Security
 
+- Banco (migration `0003`): colunas de texto de `customers` e `orders` com o tamanho que os schemas já impõem (antes `VARCHAR`
+  sem limite), `CHECK` de quantidade e preço positivos em `items`, e `customers.version` (lock otimista como em `orders`:
+  dois `PUT` concorrentes no mesmo cliente deixam de se sobrescrever em silêncio e o segundo recebe 409). A migration falha,
+  sem alterar nada, se já houver valor maior que o novo limite.
 - Imagem Docker em dois estágios, só com as dependências de runtime (`requirements.txt`; ferramentas de teste e lint
   foram para `requirements-dev.txt`), base fixada por digest. Compose publica tudo em `127.0.0.1` e com imagens por
   digest. `ci.yml` e `codeql.yml` com `permissions: contents: read`.
