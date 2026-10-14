@@ -8,6 +8,11 @@ agrupam o histórico por tema, não por tag.
 
 ### Security
 
+- Entrada: `name` (200) e `email` (320) com tamanho máximo e nome em branco rejeitado; `unit_price` limitado ao que
+  `Numeric(10, 2)` aceita (acima disso virava 500 no INSERT) e `quantity` a 10.000 por item.
+- `tax_id` é gravado e comparado na forma canônica (maiúsculas, sem `.`/`-`/`/`), com no mínimo 5 letras ou dígitos:
+  `"123.456-78"` e `"12345678"` deixam de ser dois cadastros do mesmo documento. Linhas já gravadas com pontuação ou
+  minúsculas precisam de um `UPDATE` de normalização antes do deploy.
 - `tax_id` e `passport_number` são únicos só entre clientes ativos (índice único parcial, migration `0002`): antes um
   cliente excluído mantinha o documento reservado e recadastrá-lo dava 500 (`IntegrityError` sem handler).
 - `IntegrityError` vira 409 (`CONFLICT-01`/`CONFLICT-02`, ou `CONFLICT-04` genérico), sem ecoar o valor.
