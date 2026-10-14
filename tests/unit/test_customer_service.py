@@ -13,6 +13,13 @@ from api.utils.custom_api_exception import CustomAPIException
 CURRENT_USER = CurrentUser(id="tester", roles=["admin"])
 
 
+def _assert_no_pii(detail: dict) -> None:
+    """A 409 must not echo tax_id/passport_number back: both are PII (see api/utils/sensitive.py)."""
+    rendered = str(detail)
+    for value in ("123456789", "NEW123", "ABC1234"):
+        assert value not in rendered
+
+
 def _customer_input(**overrides) -> CustomerInput:
     data = {
         "name": "Ada Lovelace",
@@ -47,6 +54,7 @@ def test_create_customer_duplicate_tax_id_raises_conflict():
 
     assert exc.value.status_code == 409
     assert exc.value.detail["code"] == "CONFLICT-01"
+    _assert_no_pii(exc.value.detail)
 
 
 def test_create_customer_duplicate_passport_raises_conflict():
@@ -63,6 +71,7 @@ def test_create_customer_duplicate_passport_raises_conflict():
 
     assert exc.value.status_code == 409
     assert exc.value.detail["code"] == "CONFLICT-02"
+    _assert_no_pii(exc.value.detail)
 
 
 def test_get_customer_not_found():

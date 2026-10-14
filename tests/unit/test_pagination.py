@@ -15,6 +15,7 @@ class _Widget(_Base):
     id = Column(Integer, primary_key=True)
     score = Column(Integer, nullable=False)
     name = Column(String, nullable=False)
+    secret = Column(String, nullable=True, info={"sensitive": True})
 
 
 @pytest.fixture
@@ -88,6 +89,43 @@ def test_filter_with_in_operator_and_invalid_list_value_raises_validation_error(
 
     assert exc.value.status_code == 400
     assert exc.value.detail["code"] == "VALIDATION-05"
+
+
+def test_filter_on_sensitive_field_is_ignored_so_it_cannot_be_used_as_an_oracle(db_session):
+    db_session.add_all(
+        [_Widget(score=1, name="a", secret="alpha"), _Widget(score=2, name="b", secret="beta")]
+    )
+    db_session.commit()
+
+    request = SearchRequest(filters={"secret": [{"op": "eq", "value": "alpha"}]})
+    _items, total = paginate(db_session.query(_Widget), _Widget, request)
+
+    assert total == 2
+
+
+def test_sort_on_sensitive_field_is_rejected_as_unknown(db_session):
+    request = SearchRequest(sort="secret")
+
+    with pytest.raises(CustomAPIException) as exc:
+        paginate(db_session.query(_Widget), _Widget, request)
+
+    assert exc.value.detail["code"] == "VALIDATION-06"
+
+
+def test_like_treats_percent_and_underscore_literally(db_session):
+    for score, name in enumerate(["100%", "100x", "a_c", "abc"]):
+        db_session.add(_Widget(score=score, name=name))
+    db_session.commit()
+
+    def like(term):
+        request = SearchRequest(filters={"name": [{"op": "lk", "value": term}]})
+        return paginate(db_session.query(_Widget), _Widget, request)
+
+    percent = like("0%")
+    underscore = like("a_c")
+
+    assert [w.name for w in percent[0]] == ["100%"]
+    assert [w.name for w in underscore[0]] == ["a_c"]
 
 
 def test_filter_on_unknown_field_is_silently_ignored(db_session):

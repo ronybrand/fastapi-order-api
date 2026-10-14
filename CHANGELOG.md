@@ -6,6 +6,13 @@ agrupam o histórico por tema, não por tag.
 
 ## [Unreleased]
 
+### Security
+
+- Busca: campos marcados `sensitive` (`tax_id`, `passport_number`, `email`) não entram mais em filtro nem
+  ordenação (oráculo de PII); `lk` trata `%` e `_` como literais; limites de campos, condições, itens de `in`,
+  tamanho de valor e offset no `SearchRequest`.
+- Os 409 de `tax_id` e `passport_number` não ecoam mais o valor (PII).
+
 ### Added
 
 - Domínio `Customer`/`Order`/`Item` completo: models, schemas, services, routers, migration

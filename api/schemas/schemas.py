@@ -2,10 +2,17 @@ from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from api.models.models import OrderStatus
 from api.utils.max_items import MAX_ITEMS_PER_ORDER
+from api.utils.search_limits import (
+    MAX_CONDITIONS_PER_FIELD,
+    MAX_FILTER_FIELDS,
+    MAX_IN_VALUES,
+    MAX_OFFSET,
+    MAX_VALUE_LENGTH,
+)
 
 
 class DefaultErrorResponse(BaseModel):
@@ -27,12 +34,36 @@ class FilterOperator(StrEnum):
     lk = "lk"
 
 
+def _check_filter_value(value: object) -> None:
+    if isinstance(value, list):
+        if len(value) > MAX_IN_VALUES:
+            raise ValueError(f"a filter list accepts at most {MAX_IN_VALUES} values")
+        for item in value:
+            _check_filter_value(item)
+    elif isinstance(value, str) and len(value) > MAX_VALUE_LENGTH:
+        raise ValueError(f"a filter value accepts at most {MAX_VALUE_LENGTH} characters")
+
+
 class SearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     page: int = Field(default=0, ge=0)
     size: int = Field(default=20, ge=1, le=100)
     sort: str | None = None
     filters: dict[str, list[dict]] | None = None
+
+    @model_validator(mode="after")
+    def within_search_limits(self) -> "SearchRequest":
+        if self.page * self.size > MAX_OFFSET:
+            raise ValueError("page is too large")
+        filters = self.filters or {}
+        if len(filters) > MAX_FILTER_FIELDS:
+            raise ValueError(f"filters accepts at most {MAX_FILTER_FIELDS} fields")
+        for conditions in filters.values():
+            if len(conditions) > MAX_CONDITIONS_PER_FIELD:
+                raise ValueError(f"a filter field accepts at most {MAX_CONDITIONS_PER_FIELD} conditions")
+            for condition in conditions:
+                _check_filter_value(condition.get("value"))
+        return self
 
 
 class PaginatedResponse[T](BaseModel):
