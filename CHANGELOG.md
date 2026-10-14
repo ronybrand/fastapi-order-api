@@ -8,6 +8,9 @@ agrupam o histórico por tema, não por tag.
 
 ### Security
 
+- Imagem Docker em dois estágios, só com as dependências de runtime (`requirements.txt`; ferramentas de teste e lint
+  foram para `requirements-dev.txt`), base fixada por digest. Compose publica tudo em `127.0.0.1` e com imagens por
+  digest. `ci.yml` e `codeql.yml` com `permissions: contents: read`.
 - Broker e SMTP: fora de `development`/`test`, `RABBITMQ_URL` é obrigatória e tem que ser `amqps://` (sem fallback
   para `guest:guest`), `SMTP_STARTTLS=true` é obrigatório e credencial (`SMTP_USER`/`SMTP_PASSWORD`) nunca trafega
   sem TLS em nenhum ambiente. A API e o worker falham no boot se a configuração for insegura.

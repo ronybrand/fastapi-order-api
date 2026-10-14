@@ -195,7 +195,7 @@ plus the environment variables `DATABASE_URL`, `JWT_PUBLIC_KEY_PATH`, `JWT_AUDIE
 
 ```
 docker compose up -d
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 alembic upgrade head
 uvicorn main:app --reload
 python worker.py   # separate process: consumes order.status.changed

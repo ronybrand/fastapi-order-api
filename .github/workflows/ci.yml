@@ -5,6 +5,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -14,7 +17,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements-dev.txt
       - run: ruff check .
       - run: mypy api worker.py
       - run: bandit -r api main.py database.py worker.py
@@ -27,7 +30,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements-dev.txt
       # tests/integration usa Testcontainers: sobe seu próprio Postgres via Docker,
       # já disponível nos runners hospedados do GitHub — não precisa de um services: aqui.
       # Cobertura medida sobre unit+integration juntos: routers/middleware só são
@@ -57,7 +60,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements-dev.txt
       - run: alembic upgrade head
         env:
           DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/orders
@@ -105,7 +108,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements-dev.txt
       # Importing main.app (export_openapi.py does this to call app.openapi()) now requires
       # JWT_PUBLIC_KEY_PATH (see ADR 0004) - any syntactically valid RSA public key works here,
       # this job never mints or verifies a real token, it only introspects route metadata.
