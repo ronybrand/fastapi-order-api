@@ -1,7 +1,8 @@
+import enum
 from datetime import datetime
 
 import pytest
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, create_engine
+from sqlalchemy import Boolean, Column, DateTime, Enum, Integer, Numeric, String, create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from api.schemas.schemas import SearchRequest
@@ -9,6 +10,11 @@ from api.utils.custom_api_exception import CustomAPIException
 from api.utils.pagination import paginate
 
 _Base = declarative_base()
+
+
+class _Color(enum.StrEnum):
+    RED = "RED"
+    BLUE = "BLUE"
 
 
 class _Widget(_Base):
@@ -20,6 +26,8 @@ class _Widget(_Base):
     secret = Column(String, nullable=True, info={"sensitive": True})
     active = Column(Boolean, nullable=True)
     created = Column(DateTime, nullable=True)
+    color = Column(Enum(_Color), nullable=True)
+    price = Column(Numeric(10, 2), nullable=True)
 
 
 @pytest.fixture
@@ -95,25 +103,18 @@ def test_filter_with_in_operator_and_invalid_list_value_raises_validation_error(
     assert exc.value.detail["code"] == "VALIDATION-05"
 
 
-def test_filter_on_sensitive_field_is_ignored_so_it_cannot_be_used_as_an_oracle(db_session):
+def test_sensitive_field_can_be_filtered_and_sorted(db_session):
     db_session.add_all(
         [_Widget(score=1, name="a", secret="alpha"), _Widget(score=2, name="b", secret="beta")]
     )
     db_session.commit()
 
-    request = SearchRequest(filters={"secret": [{"op": "eq", "value": "alpha"}]})
-    _items, total = paginate(db_session.query(_Widget), _Widget, request)
+    filtered, total = _search(db_session, "secret", "eq", "alpha")
+    ordered, _ = paginate(db_session.query(_Widget), _Widget, SearchRequest(sort="-secret"))
 
-    assert total == 2
-
-
-def test_sort_on_sensitive_field_is_rejected_as_unknown(db_session):
-    request = SearchRequest(sort="secret")
-
-    with pytest.raises(CustomAPIException) as exc:
-        paginate(db_session.query(_Widget), _Widget, request)
-
-    assert exc.value.detail["code"] == "VALIDATION-06"
+    assert [w.name for w in filtered] == ["a"]
+    assert total == 1
+    assert [w.name for w in ordered] == ["b", "a"]
 
 
 def test_like_treats_percent_and_underscore_literally(db_session):
@@ -250,3 +251,40 @@ def test_a_list_is_only_allowed_for_in_and_between(db_session):
 
 def test_null_value_is_rejected(db_session):
     _assert_invalid_filter(db_session, "score", "eq", None)
+
+
+@pytest.mark.parametrize("op", ["gt", "gte", "lt", "lte"])
+def test_ordering_operators_are_rejected_on_enum_columns(db_session, op):
+    _assert_invalid_filter(db_session, "color", op, "RED")
+
+
+def test_ordering_operators_are_rejected_on_boolean_columns(db_session):
+    _assert_invalid_filter(db_session, "active", "gt", True)
+
+
+def test_between_is_rejected_on_enum_columns(db_session):
+    _assert_invalid_filter(db_session, "color", "between", ["RED", "BLUE"])
+
+
+def test_enum_filter_matches_by_value(db_session):
+    db_session.add_all(
+        [_Widget(score=1, name="r", color=_Color.RED), _Widget(score=2, name="b", color=_Color.BLUE)]
+    )
+    db_session.commit()
+
+    items, _total = _search(db_session, "color", "eq", "BLUE")
+
+    assert [w.name for w in items] == ["b"]
+
+
+def test_enum_filter_rejects_an_unknown_value(db_session):
+    _assert_invalid_filter(db_session, "color", "eq", "GREEN")
+
+
+@pytest.mark.parametrize("value", ["NaN", "Infinity", "-Infinity", "1e3", "abc"])
+def test_decimal_filter_rejects_non_finite_and_exponent_values(db_session, value):
+    _assert_invalid_filter(db_session, "price", "eq", value)
+
+
+def test_decimal_filter_accepts_a_plain_number(db_session):
+    _search(db_session, "price", "eq", "1.50")
