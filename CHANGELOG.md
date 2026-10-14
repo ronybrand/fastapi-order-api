@@ -8,6 +8,10 @@ agrupam o histórico por tema, não por tag.
 
 ### Security
 
+- Testes de integração contra Postgres real e conexões concorrentes (`tests/integration/test_database_behavior.py`): recadastro do
+  documento de cliente excluído, dois cadastros simultâneos do mesmo documento, corrida excluir cliente x criar pedido (10 rodadas),
+  lock otimista e ciclo `upgrade head` / `check` / `downgrade base` / `upgrade head` das migrations.
+
 - Banco (migration `0003`): colunas de texto de `customers` e `orders` com o tamanho que os schemas já impõem (antes `VARCHAR`
   sem limite), `CHECK` de quantidade e preço positivos em `items`, e `customers.version` (lock otimista como em `orders`:
   dois `PUT` concorrentes no mesmo cliente deixam de se sobrescrever em silêncio e o segundo recebe 409). A migration falha,
