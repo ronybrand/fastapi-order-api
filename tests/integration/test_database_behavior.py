@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import StaleDataError
 
 from api.dependencies.dependencies import CurrentUser
-from api.models.models import Base, Order
+from api.models.models import Base, Customer, Order
 from api.schemas.schemas import CustomerInput, ItemInput, OrderCreate
 from api.services.customer_service import CustomerService
 from api.services.order_service import OrderService
@@ -153,6 +153,42 @@ def test_deleting_a_customer_and_creating_an_order_never_leave_an_active_order_u
 
 
 # --- lock otimista -----------------------------------------------------------------------------------------
+def test_two_concurrent_updates_of_the_same_customer_do_not_silently_overwrite_each_other(fresh_engine):
+    with Session(fresh_engine) as db:
+        customer_id = CustomerService.create(db, _customer_input(), ADMIN).id
+
+    with Session(fresh_engine) as first, Session(fresh_engine) as second:
+        loaded_by_first = first.get(Customer, customer_id)
+        loaded_by_second = second.get(Customer, customer_id)
+
+        loaded_by_first.name = "First writer"
+        first.commit()
+
+        loaded_by_second.name = "Second writer"
+        with pytest.raises(StaleDataError):
+            second.commit()
+
+    with Session(fresh_engine) as db:
+        assert db.get(Customer, customer_id).name == "First writer"
+
+
+def test_the_database_itself_refuses_an_item_with_a_non_positive_quantity_or_price(fresh_engine):
+    with Session(fresh_engine) as db:
+        customer_id = CustomerService.create(db, _customer_input(), ADMIN).id
+        order_id = OrderService.create(db, OrderCreate(customer_id=customer_id, items=[]), USER).id
+
+    for quantity, price in ((0, "1.00"), (-1, "1.00"), (1, "0.00"), (1, "-5.00")):
+        with fresh_engine.connect() as connection:
+            with pytest.raises(IntegrityError):
+                connection.execute(
+                    text(
+                        "INSERT INTO items (order_id, description, unit_price, quantity) "
+                        "VALUES (:order_id, 'x', :price, :quantity)"
+                    ),
+                    {"order_id": order_id, "price": price, "quantity": quantity},
+                )
+
+
 def test_two_concurrent_changes_to_the_same_order_conflict(fresh_engine):
     with Session(fresh_engine) as db:
         customer_id = CustomerService.create(db, _customer_input(), ADMIN).id
@@ -191,6 +227,11 @@ def test_migrations_apply_roll_back_and_apply_again_leaving_model_and_schema_in_
         assert indexes["uq_customers_tax_id"]["unique"]
         assert "deleted_at IS NULL" in indexes["uq_customers_tax_id"]["dialect_options"]["postgresql_where"]
         assert indexes["uq_customers_passport_number"]["unique"]
+        columns = {column["name"]: column for column in inspector.get_columns("customers")}
+        assert columns["name"]["type"].length == 200
+        assert "version" in columns
+        checks = {check["name"] for check in inspector.get_check_constraints("items")}
+        assert {"ck_items_quantity_positive", "ck_items_unit_price_positive"} <= checks
     finally:
         engine.dispose()
 

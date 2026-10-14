@@ -12,6 +12,10 @@ agrupam o histórico por tema, não por tag.
   documento de cliente excluído, dois cadastros simultâneos do mesmo documento, corrida excluir cliente x criar pedido (10 rodadas),
   lock otimista e ciclo `upgrade head` / `check` / `downgrade base` / `upgrade head` das migrations.
 
+- Banco (migration `0003`): colunas de texto de `customers` e `orders` com o tamanho que os schemas já impõem (antes `VARCHAR`
+  sem limite), `CHECK` de quantidade e preço positivos em `items`, e `customers.version` (lock otimista como em `orders`:
+  dois `PUT` concorrentes no mesmo cliente deixam de se sobrescrever em silêncio e o segundo recebe 409). A migration falha,
+  sem alterar nada, se já houver valor maior que o novo limite.
 - JWT: `JWT_AUDIENCE` e `JWT_ISSUER` são obrigatórios fora de development/test (o default igual ao nome do serviço permitiria
   reaproveitar um token entre serviços); tolerância de 30 s de relógio (`exp`/`nbf`); `sub` com no máximo 200 caracteres; a
   validação do token ficou num ponto só (`decode_access_token`), usado também pelo rate limit.

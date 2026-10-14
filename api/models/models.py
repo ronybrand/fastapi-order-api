@@ -1,6 +1,7 @@
 import enum
 
 from sqlalchemy import (
+    CheckConstraint,
     Column,
     DateTime,
     Enum,
@@ -16,11 +17,16 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import declarative_base, relationship
 
+from api.utils.field_limits import MAX_EMAIL_LENGTH, MAX_NAME_LENGTH
+
 Base = declarative_base()
 
 # UUID gerado pelo banco (ver "Convenções de model" na skill fastapi-feature): nunca
 # default=uuid.uuid4 em Python, deixa o SQLAlchemy reler o valor gerado pelo Postgres.
 _GEN_RANDOM_UUID = text("gen_random_uuid()")
+
+# `sub` do token (quem fez a mutacao). O limite de 200 e conferido em get_current_user.
+_ACTOR_LENGTH = 200
 
 
 class AuditMixin:
@@ -31,8 +37,8 @@ class AuditMixin:
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
-    created_by = Column(String, nullable=False)
-    updated_by = Column(String, nullable=False)
+    created_by = Column(String(_ACTOR_LENGTH), nullable=False)
+    updated_by = Column(String(_ACTOR_LENGTH), nullable=False)
 
 
 class SoftDeleteMixin:
@@ -41,7 +47,7 @@ class SoftDeleteMixin:
     esse filtro sozinho."""
 
     deleted_at = Column(DateTime(timezone=True), nullable=True)
-    deleted_by = Column(String, nullable=True)
+    deleted_by = Column(String(_ACTOR_LENGTH), nullable=True)
 
 
 class OrderStatus(enum.StrEnum):
@@ -66,10 +72,17 @@ class Customer(Base, AuditMixin, SoftDeleteMixin):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=_GEN_RANDOM_UUID)
-    name = Column(String, nullable=False)
-    tax_id = Column(String, nullable=False, info={"sensitive": True})
-    passport_number = Column(String, nullable=True, info={"sensitive": True})
-    email = Column(String, nullable=False, info={"sensitive": True})
+    # Tamanhos iguais aos limites dos schemas (api/utils/field_limits.py): o banco recusa o que o schema
+    # recusaria.
+    name = Column(String(MAX_NAME_LENGTH), nullable=False)
+    tax_id = Column(String(20), nullable=False, info={"sensitive": True})
+    passport_number = Column(String(9), nullable=True, info={"sensitive": True})
+    email = Column(String(MAX_EMAIL_LENGTH), nullable=False, info={"sensitive": True})
+    version = Column(Integer, nullable=False, default=1)
+
+    # Lock otimista (como Order): dois PUT concorrentes no mesmo cliente deixam de sobrescrever um ao outro
+    # em silencio - o segundo recebe StaleDataError, tratado globalmente como 409 em main.py.
+    __mapper_args__ = {"version_id_col": version}
 
     orders = relationship("Order", back_populates="customer")
 
@@ -103,6 +116,12 @@ class Order(Base, AuditMixin, SoftDeleteMixin):
 
 class Item(Base):
     __tablename__ = "items"
+    # Defesa em profundidade: o schema ja recusa, mas qualquer outro caminho de escrita (script, migration de
+    # dados, outro servico) tambem nao consegue gravar item com quantidade ou preco nao positivos.
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_items_quantity_positive"),
+        CheckConstraint("unit_price > 0", name="ck_items_unit_price_positive"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=_GEN_RANDOM_UUID)
     order_id = Column(
