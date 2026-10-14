@@ -166,3 +166,26 @@ def test_update_customer_duplicate_tax_id_raises_conflict():
 
     assert exc.value.status_code == 409
     assert exc.value.detail["code"] == "CONFLICT-01"
+
+
+def test_delete_customer_locks_the_row_exclusively_before_checking_for_orders():
+    mock_db = MagicMock(spec=Session)
+    customer_id = uuid4()
+    customer = Customer(id=customer_id, tax_id="AB123456")
+    queries = []
+
+    def query_side_effect(model):
+        query_mock = MagicMock()
+        queries.append(query_mock)
+        if model is Customer:
+            query_mock.filter.return_value.filter.return_value.first.return_value = customer
+        else:
+            query_mock.filter.return_value.count.return_value = 0
+        return query_mock
+
+    mock_db.query.side_effect = query_side_effect
+
+    CustomerService.delete(mock_db, customer_id, CURRENT_USER)
+
+    lock_query = queries[0]
+    lock_query.filter.return_value.with_for_update.assert_called_once_with(read=False)

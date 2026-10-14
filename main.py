@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 from starlette.middleware.cors import CORSMiddleware
 
@@ -103,6 +104,23 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "request_id": get_request_id(),
         }
     return JSONResponse(content=content, status_code=status.HTTP_400_BAD_REQUEST)
+
+
+_UNIQUE_CONFLICTS = {
+    "uq_customers_tax_id": ("Customer with this tax_id already exists", "CONFLICT-01"),
+    "uq_customers_passport_number": ("Customer with this passport_number already exists", "CONFLICT-02"),
+}
+
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(request: Request, exc: IntegrityError):
+    # The unique indexes are the real guarantee under concurrency: the service-level check only gives the
+    # common case a readable 409 without a failed write. Whatever slips past it (two simultaneous creates)
+    # lands here and is still a 409 - never a 500 - and never echoes the offending value (PII).
+    constraint = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+    message, code = _UNIQUE_CONFLICTS.get(constraint, ("Data integrity violation", "CONFLICT-04"))
+    content = {"message": message, "code": code, "params": {}, "request_id": get_request_id()}
+    return JSONResponse(content=content, status_code=status.HTTP_409_CONFLICT)
 
 
 @app.exception_handler(StaleDataError)

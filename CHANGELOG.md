@@ -8,6 +8,12 @@ agrupam o histórico por tema, não por tag.
 
 ### Security
 
+- `tax_id` e `passport_number` são únicos só entre clientes ativos (índice único parcial, migration `0002`): antes um
+  cliente excluído mantinha o documento reservado e recadastrá-lo dava 500 (`IntegrityError` sem handler).
+- `IntegrityError` vira 409 (`CONFLICT-01`/`CONFLICT-02`, ou `CONFLICT-04` genérico), sem ecoar o valor.
+- Excluir cliente (`FOR UPDATE`) e criar pedido (`FOR SHARE`) serializam na linha do cliente: não sobra mais pedido
+  ativo de cliente excluído.
+- `POST /orders/{id}/items` respeita o limite de 200 itens (`VALIDATION-09`), antes só aplicado na criação.
 - Busca: campos marcados `sensitive` (`tax_id`, `passport_number`, `email`) não entram mais em filtro nem
   ordenação (oráculo de PII); `lk` trata `%` e `_` como literais; limites de campos, condições, itens de `in`,
   tamanho de valor e offset no `SearchRequest`.

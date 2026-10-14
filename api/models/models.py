@@ -5,10 +5,10 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
-    UniqueConstraint,
     func,
     text,
 )
@@ -52,9 +52,17 @@ class OrderStatus(enum.StrEnum):
 
 class Customer(Base, AuditMixin, SoftDeleteMixin):
     __tablename__ = "customers"
+    # Unique among active customers only: a soft-deleted customer releases its tax_id/passport_number.
+    # (A plain UniqueConstraint keeps them reserved forever, and the service-level check only looks at
+    # active rows - so re-registering a deleted document passed the check and failed on INSERT as a 500.)
     __table_args__ = (
-        UniqueConstraint("tax_id", name="uq_customers_tax_id"),
-        UniqueConstraint("passport_number", name="uq_customers_passport_number"),
+        Index("uq_customers_tax_id", "tax_id", unique=True, postgresql_where=text("deleted_at IS NULL")),
+        Index(
+            "uq_customers_passport_number",
+            "passport_number",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=_GEN_RANDOM_UUID)

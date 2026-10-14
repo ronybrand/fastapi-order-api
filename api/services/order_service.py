@@ -8,7 +8,9 @@ from api.dependencies.dependencies import CurrentUser
 from api.events.order_events import build_order_status_changed_event, publish_order_status_changed
 from api.models.models import Customer, Item, Order, OrderStatus
 from api.schemas.schemas import ItemInput, OrderCreate, SearchRequest
+from api.services.customer_service import lock_customer_row
 from api.utils.custom_api_exception import CustomAPIException
+from api.utils.max_items import MAX_ITEMS_PER_ORDER
 from api.utils.pagination import paginate
 
 logger = logging.getLogger(__name__)
@@ -76,6 +78,7 @@ def _transition_status(
 class OrderService:
     @staticmethod
     def create(db: Session, order_in: OrderCreate, current_user: CurrentUser) -> Order:
+        lock_customer_row(db, order_in.customer_id, shared=True)
         customer = (
             db.query(Customer)
             .filter(Customer.id == order_in.customer_id, Customer.deleted_at.is_(None))
@@ -131,6 +134,13 @@ class OrderService:
     def add_item(db: Session, order_id: UUID, item_in: ItemInput, current_user: CurrentUser) -> Order:
         order = _get_active_order(db, order_id)
         _assert_editable(order)
+        if len(order.items) >= MAX_ITEMS_PER_ORDER:
+            raise CustomAPIException(
+                status_code=400,
+                message=f"An order can have at most {MAX_ITEMS_PER_ORDER} items",
+                code="VALIDATION-09",
+                params={"max": MAX_ITEMS_PER_ORDER},
+            )
 
         db.add(
             Item(

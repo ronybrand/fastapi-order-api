@@ -45,6 +45,14 @@ def _assert_unique(db: Session, customer: CustomerInput, exclude_id: UUID | None
             )
 
 
+def lock_customer_row(db: Session, customer_id: UUID, *, shared: bool) -> None:
+    """Row lock on the customer: FOR SHARE when an order is being created for it, FOR UPDATE when it
+    is being deleted. The two are incompatible, so a delete and an order creation for the same
+    customer serialize instead of interleaving (a soft delete does not conflict with the FK check
+    on insert, so without this an active order could end up under a deleted customer)."""
+    db.query(Customer.id).filter(Customer.id == customer_id).with_for_update(read=shared).first()
+
+
 class CustomerService:
     @staticmethod
     def create(db: Session, customer: CustomerInput, current_user: CurrentUser) -> Customer:
@@ -96,6 +104,7 @@ class CustomerService:
 
     @staticmethod
     def delete(db: Session, customer_id: UUID, current_user: CurrentUser) -> None:
+        lock_customer_row(db, customer_id, shared=False)
         db_customer = CustomerService.get(db, customer_id)
 
         has_orders = (
