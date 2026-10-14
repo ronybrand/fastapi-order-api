@@ -1,7 +1,7 @@
 import json
 import logging
-import os
 import smtplib
+import ssl
 import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -14,6 +14,8 @@ from api.events.rabbitmq_publisher import (
     ORDER_STATUS_CHANGED_QUEUE,
     QUEUE_ARGUMENTS,
 )
+from api.utils.messaging_config import rabbitmq_url, smtp_settings
+from api.utils.recent_message_ids import RecentMessageIds
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("worker")
@@ -21,6 +23,9 @@ logger = logging.getLogger("worker")
 RECONNECT_DELAY_SECONDS = 5
 RETRY_BACKOFF_SECONDS = 2
 MAX_RETRIES = 3
+REMEMBERED_MESSAGES = 10_000
+
+_recent_message_ids = RecentMessageIds(capacity=REMEMBERED_MESSAGES)
 
 _REQUIRED_EVENT_FIELDS = (
     "order_id",
@@ -37,22 +42,29 @@ def _send_email(event: dict) -> None:
     """Envia via SMTP (smtplib). Em dev/local, SMTP_HOST aponta para o Mailpit
     (docker-compose) — nenhum e-mail real sai, mas o fluxo roda de ponta a ponta e o
     resultado é inspecionável em http://localhost:8025."""
-    host = os.environ.get("SMTP_HOST", "localhost")
-    port = int(os.environ.get("SMTP_PORT", "1025"))
-    from_addr = os.environ.get("SMTP_FROM", "no-reply@order-api.local")
+    settings = smtp_settings()
 
     message = MIMEMultipart("alternative")
     message["Subject"] = f"Order #{event['order_id'][:8].upper()} — {event['new_status']}"
-    message["From"] = from_addr
+    message["From"] = settings.from_addr
     message["To"] = event["customer_email"]
     message.attach(MIMEText(build_order_status_email_html(event), "html"))
 
-    with smtplib.SMTP(host, port, timeout=10) as smtp:
+    with smtplib.SMTP(settings.host, settings.port, timeout=10) as smtp:
+        if settings.starttls:
+            smtp.starttls(context=ssl.create_default_context())
+        if settings.user:
+            smtp.login(settings.user, settings.password or "")
         smtp.send_message(message)
 
 
 def _is_valid_event(payload: object) -> bool:
     return isinstance(payload, dict) and all(field in payload for field in _REQUIRED_EVENT_FIELDS)
+
+
+def _message_id(properties) -> str | None:
+    value = getattr(properties, "message_id", None) if properties else None
+    return value if isinstance(value, str) and value else None
 
 
 def _retry_or_dead_letter(channel, method, properties, body, error: Exception) -> None:
@@ -79,7 +91,12 @@ def _retry_or_dead_letter(channel, method, properties, body, error: Exception) -
         exchange="",
         routing_key=ORDER_STATUS_CHANGED_QUEUE,
         body=body,
-        properties=pika.BasicProperties(content_type="application/json", delivery_mode=2, headers=headers),
+        properties=pika.BasicProperties(
+            content_type="application/json",
+            delivery_mode=2,
+            headers=headers,
+            message_id=_message_id(properties),
+        ),
     )
     channel.basic_ack(delivery_tag=method.delivery_tag)
 
@@ -97,8 +114,16 @@ def _handle_message(channel, method, properties, body) -> None:
         channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
         return
 
+    message_id = _message_id(properties)
+    if message_id is not None and message_id in _recent_message_ids:
+        logger.info("Duplicate delivery of message_id=%s ignored", message_id)
+        channel.basic_ack(delivery_tag=method.delivery_tag)
+        return
+
     try:
         _send_email(event)
+        if message_id is not None:
+            _recent_message_ids.add(message_id)
         # Nunca logar customer_email em texto claro (mesma convenção de order_events.py).
         logger.info(
             "order_status_notification_sent: order_id=%s old_status=%s new_status=%s",
@@ -107,6 +132,10 @@ def _handle_message(channel, method, properties, body) -> None:
             event["new_status"],
         )
         channel.basic_ack(delivery_tag=method.delivery_tag)
+    except smtplib.SMTPRecipientsRefused:
+        # Endereco recusado nao melhora com retry: DLQ direto (e sem logar o endereco, que e PII).
+        logger.error("Recipient refused, sending message to DLQ: order_id=%s", event["order_id"])
+        channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
     except Exception as error:
         _retry_or_dead_letter(channel, method, properties, body, error)
 
@@ -116,7 +145,8 @@ def run() -> None:
     Reconecta indefinidamente se o broker cair ou estiver indisponível no boot, em vez de
     encerrar o processo - roda como um processo/container de longa duração separado da API
     (`python worker.py`), nao dentro do processo do uvicorn."""
-    url = os.environ.get("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
+    url = rabbitmq_url()  # falha o boot (nao a cada reconexao) se a configuracao for insegura
+    smtp_settings()
 
     while True:
         try:

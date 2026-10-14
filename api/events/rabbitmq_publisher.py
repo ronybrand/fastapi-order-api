@@ -1,6 +1,6 @@
 import json
 import logging
-import os
+import uuid
 from dataclasses import asdict
 from datetime import datetime
 from decimal import Decimal
@@ -10,6 +10,7 @@ import pika
 
 from api.events.order_events import OrderStatusChangedEvent
 from api.models.models import OrderStatus
+from api.utils.messaging_config import rabbitmq_url
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +40,8 @@ def publish_to_rabbitmq(event: OrderStatusChangedEvent) -> None:
     (ver worker.py). Falha de forma isolada (log + retorno) em vez de propagar: uma
     indisponibilidade do broker não deve derrubar a confirmação/cancelamento do pedido,
     que já foi commitado no banco antes desta chamada (ver order_service.py)."""
-    url = os.environ.get("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
     try:
+        url = rabbitmq_url()
         connection = pika.BlockingConnection(pika.URLParameters(url))
         try:
             channel = connection.channel()
@@ -50,7 +51,10 @@ def publish_to_rabbitmq(event: OrderStatusChangedEvent) -> None:
                 exchange="",
                 routing_key=ORDER_STATUS_CHANGED_QUEUE,
                 body=json.dumps(asdict(event), default=_json_default),
-                properties=pika.BasicProperties(content_type="application/json", delivery_mode=2),
+                # O id viaja com a mensagem (e com os retries) para o worker reconhecer uma reentrega.
+                properties=pika.BasicProperties(
+                    content_type="application/json", delivery_mode=2, message_id=str(uuid.uuid4())
+                ),
             )
         finally:
             connection.close()
