@@ -108,3 +108,28 @@ def test_roles_claim_that_is_not_a_list_of_strings_is_rejected(roles):
 
 def test_missing_roles_claim_defaults_to_plain_user():
     assert _authenticate(_sign(roles=None)).roles == [ROLE_USER]
+
+
+# --- clock skew (leeway), not-before and subject length ---
+def test_a_token_that_expired_a_few_seconds_ago_is_still_accepted_within_the_clock_skew():
+    assert _authenticate(_sign(exp=int(time.time()) - 10)).id == "u-1"
+
+
+def test_a_token_that_expired_beyond_the_clock_skew_is_rejected():
+    _assert_unauthorized(_sign(exp=int(time.time()) - 120))
+
+
+def test_a_token_not_valid_yet_is_rejected():
+    _assert_unauthorized(_sign(nbf=int(time.time()) + 120))
+
+
+def test_a_token_that_becomes_valid_within_the_clock_skew_is_accepted():
+    assert _authenticate(_sign(nbf=int(time.time()) + 10)).id == "u-1"
+
+
+def test_a_subject_longer_than_the_audit_columns_is_rejected():
+    _assert_unauthorized(_sign(sub="x" * 201))
+
+
+def test_a_subject_at_the_audit_column_limit_is_accepted():
+    assert len(_authenticate(_sign(sub="x" * 200)).id) == 200

@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from api.security.roles import ROLE_USER
+from api.utils.messaging_config import is_production
 from database import SessionLocal
 
 # This service only verifies tokens - it never issues them (no /auth/login endpoint here).
@@ -23,8 +24,19 @@ if JWT_PUBLIC_KEY_PATH is None:
 
 JWT_PUBLIC_KEY = Path(JWT_PUBLIC_KEY_PATH).read_bytes()
 JWT_ALGORITHM = "RS256"
-JWT_AUDIENCE = os.environ.get("JWT_AUDIENCE", "fastapi-order-api")
-JWT_ISSUER = os.environ.get("JWT_ISSUER", "fastapi-order-api")
+# Em producao audience e issuer tem que ser definidos de forma explicita: o default (o nome do servico) e
+# igual em todo servico que o adotar, e um token emitido para um serviria no outro.
+JWT_AUDIENCE = os.environ.get("JWT_AUDIENCE")
+JWT_ISSUER = os.environ.get("JWT_ISSUER")
+if is_production() and (JWT_AUDIENCE is None or JWT_ISSUER is None):
+    missing = "JWT_AUDIENCE" if JWT_AUDIENCE is None else "JWT_ISSUER"
+    raise RuntimeError(f"{missing} must be set when APP_ENV is not development/test")
+JWT_AUDIENCE = JWT_AUDIENCE or "fastapi-order-api"
+JWT_ISSUER = JWT_ISSUER or "fastapi-order-api"
+# Tolerancia a relogio dessincronizado entre quem emite o token e este servico (exp/nbf/iat).
+JWT_LEEWAY_SECONDS = 30
+# created_by/updated_by/deleted_by sao varchar(200): um `sub` maior estouraria no INSERT (500).
+MAX_SUBJECT_LENGTH = 200
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -32,6 +44,22 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 def _unauthorized(detail: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED, detail=detail, headers={"WWW-Authenticate": "Bearer"}
+    )
+
+
+def decode_access_token(token: str) -> dict:
+    """Unico ponto que valida um JWT (assinatura RS256, aud, iss, exp, nbf): usado por get_current_user e pela
+    chave do rate limit, para as duas nunca divergirem. Levanta jwt.PyJWTError se o token nao serve."""
+    return jwt.decode(
+        token,
+        JWT_PUBLIC_KEY,
+        algorithms=[JWT_ALGORITHM],
+        audience=JWT_AUDIENCE,
+        issuer=JWT_ISSUER,
+        leeway=JWT_LEEWAY_SECONDS,
+        # PyJWT only checks a claim that is present: without "require" a token with no exp (valid
+        # forever) or no aud/iss would pass. The signing issuer must set all four.
+        options={"require": ["exp", "sub", "aud", "iss"]},
     )
 
 
@@ -61,21 +89,12 @@ def get_current_user(
         raise _unauthorized("Not authenticated")
 
     try:
-        payload = jwt.decode(
-            credentials.credentials,
-            JWT_PUBLIC_KEY,
-            algorithms=[JWT_ALGORITHM],
-            audience=JWT_AUDIENCE,
-            issuer=JWT_ISSUER,
-            # PyJWT only checks a claim that is present: without "require" a token with no exp (valid
-            # forever) or no aud/iss would pass. The signing issuer must set all four.
-            options={"require": ["exp", "sub", "aud", "iss"]},
-        )
+        payload = decode_access_token(credentials.credentials)
     except jwt.PyJWTError as exc:
         raise _unauthorized("Invalid token") from exc
 
     subject = payload.get("sub")
-    if subject is None:
+    if not isinstance(subject, str) or not subject or len(subject) > MAX_SUBJECT_LENGTH:
         raise _unauthorized("Invalid token")
 
     roles = payload.get("roles", [ROLE_USER])

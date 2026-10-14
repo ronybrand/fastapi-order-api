@@ -11,7 +11,9 @@ from api.security.middleware import (
     MAX_BODY_SIZE_BYTES,
     BodySizeLimitMiddleware,
     CorrelationIdMiddleware,
+    RequestBodyTooLarge,
     SecurityHeadersMiddleware,
+    request_body_too_large_handler,
 )
 from api.security.rate_limit import limiter, rate_limit_key
 from tests.utils.auth import build_token
@@ -159,3 +161,48 @@ def test_health_probe_is_exempt_from_the_global_limit():
 )
 def test_every_order_write_has_its_own_limit(route):
     assert f"api.routers.orders.{route}" in limiter._route_limits
+
+
+# --- body without Content-Length (chunked) ---
+async def _read_body(request):
+    body = await request.body()
+    return JSONResponse({"read": len(body)})
+
+
+def _limited_app(limit: int):
+    app = Starlette(
+        routes=[Route("/", _read_body, methods=["POST"])],
+        exception_handlers={RequestBodyTooLarge: request_body_too_large_handler},
+    )
+    app.add_middleware(BodySizeLimitMiddleware, max_body_size=limit)
+    app.add_middleware(CorrelationIdMiddleware)
+    return app
+
+
+def _chunks(total: int, size: int = 100):
+    sent = 0
+    while sent < total:
+        piece = min(size, total - sent)
+        sent += piece
+        yield b"x" * piece
+
+
+def test_a_chunked_body_over_the_limit_is_cut_off_with_413():
+    """Without a Content-Length the header check cannot see the size: the bytes have to be counted
+    as they arrive, or a chunked upload bypasses the limit completely."""
+    response = TestClient(_limited_app(1024)).post("/", content=_chunks(5000))
+
+    assert response.status_code == 413
+    assert response.json()["code"] == "VALIDATION-08"
+    assert response.json()["request_id"] == response.headers["X-Request-Id"]
+
+
+def test_a_chunked_body_within_the_limit_passes():
+    response = TestClient(_limited_app(1024)).post("/", content=_chunks(1000))
+
+    assert response.status_code == 200
+    assert response.json() == {"read": 1000}
+
+
+def test_a_chunked_body_exactly_at_the_limit_passes():
+    assert TestClient(_limited_app(1024)).post("/", content=_chunks(1024)).status_code == 200
