@@ -1,5 +1,7 @@
+from datetime import datetime
+
 import pytest
-from sqlalchemy import Column, Integer, String, create_engine
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from api.schemas.schemas import SearchRequest
@@ -16,6 +18,8 @@ class _Widget(_Base):
     score = Column(Integer, nullable=False)
     name = Column(String, nullable=False)
     secret = Column(String, nullable=True, info={"sensitive": True})
+    active = Column(Boolean, nullable=True)
+    created = Column(DateTime, nullable=True)
 
 
 @pytest.fixture
@@ -157,3 +161,92 @@ def test_sort_descending_orders_highest_score_first(db_session):
     items, _total = paginate(db_session.query(_Widget), _Widget, request)
 
     assert items[0].id == highest.id
+
+
+def _search(db_session, field, op, value):
+    request = SearchRequest(filters={field: [{"op": op, "value": value}]})
+    return paginate(db_session.query(_Widget), _Widget, request)
+
+
+def _assert_invalid_filter(db_session, field, op, value):
+    with pytest.raises(CustomAPIException) as exc:
+        _search(db_session, field, op, value)
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail["code"] == "VALIDATION-05"
+
+
+def test_boolean_filter_understands_false(db_session):
+    db_session.add_all([_Widget(score=1, name="on", active=True), _Widget(score=2, name="off", active=False)])
+    db_session.commit()
+
+    items, total = _search(db_session, "active", "eq", "false")
+
+    assert [w.name for w in items] == ["off"]
+    assert total == 1
+
+
+def test_boolean_filter_accepts_json_booleans(db_session):
+    db_session.add_all([_Widget(score=1, name="on", active=True), _Widget(score=2, name="off", active=False)])
+    db_session.commit()
+
+    items, _total = _search(db_session, "active", "eq", True)
+
+    assert [w.name for w in items] == ["on"]
+
+
+def test_boolean_filter_rejects_anything_that_is_not_true_or_false(db_session):
+    _assert_invalid_filter(db_session, "active", "eq", "maybe")
+
+
+def test_datetime_filter_parses_iso_8601(db_session):
+    db_session.add_all(
+        [
+            _Widget(score=1, name="old", created=datetime(2025, 1, 1)),
+            _Widget(score=2, name="new", created=datetime(2026, 1, 1)),
+        ]
+    )
+    db_session.commit()
+
+    items, _total = _search(db_session, "created", "gte", "2025-06-01T00:00:00")
+
+    assert [w.name for w in items] == ["new"]
+
+
+def test_datetime_filter_rejects_garbage(db_session):
+    _assert_invalid_filter(db_session, "created", "eq", "yesterday")
+
+
+def test_integer_filter_rejects_a_fractional_number(db_session):
+    _assert_invalid_filter(db_session, "score", "eq", 1.5)
+
+
+def test_integer_filter_rejects_a_boolean(db_session):
+    _assert_invalid_filter(db_session, "score", "eq", True)
+
+
+def test_between_requires_exactly_two_values(db_session):
+    _assert_invalid_filter(db_session, "score", "between", [1])
+    _assert_invalid_filter(db_session, "score", "between", [1, 2, 3])
+    _assert_invalid_filter(db_session, "score", "between", 1)
+
+
+def test_between_with_two_values_filters_inclusively(db_session):
+    for score in (1, 5, 9):
+        _make_widget(db_session, score=score)
+
+    items, _total = _search(db_session, "score", "between", [1, 5])
+
+    assert sorted(w.score for w in items) == [1, 5]
+
+
+def test_like_is_only_allowed_on_text_columns(db_session):
+    _assert_invalid_filter(db_session, "score", "lk", "1")
+
+
+def test_a_list_is_only_allowed_for_in_and_between(db_session):
+    _assert_invalid_filter(db_session, "score", "eq", [1, 2])
+
+
+def test_null_value_is_rejected(db_session):
+    _assert_invalid_filter(db_session, "score", "eq", None)
