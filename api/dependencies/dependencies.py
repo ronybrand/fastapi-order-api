@@ -29,6 +29,12 @@ JWT_ISSUER = os.environ.get("JWT_ISSUER", "fastapi-order-api")
 _bearer_scheme = HTTPBearer(auto_error=False)
 
 
+def _unauthorized(detail: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED, detail=detail, headers={"WWW-Authenticate": "Bearer"}
+    )
+
+
 def get_db():
     db = SessionLocal()
     try:
@@ -52,7 +58,7 @@ def get_current_user(
     """Decodifica e valida o Bearer token num único ponto central — nunca duplique essa
     validação por router. Toda rota protegida declara `Depends(get_current_user)`."""
     if credentials is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+        raise _unauthorized("Not authenticated")
 
     try:
         payload = jwt.decode(
@@ -61,15 +67,23 @@ def get_current_user(
             algorithms=[JWT_ALGORITHM],
             audience=JWT_AUDIENCE,
             issuer=JWT_ISSUER,
+            # PyJWT only checks a claim that is present: without "require" a token with no exp (valid
+            # forever) or no aud/iss would pass. The signing issuer must set all four.
+            options={"require": ["exp", "sub", "aud", "iss"]},
         )
     except jwt.PyJWTError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
+        raise _unauthorized("Invalid token") from exc
 
     subject = payload.get("sub")
     if subject is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        raise _unauthorized("Invalid token")
 
-    return CurrentUser(id=subject, roles=payload.get("roles", [ROLE_USER]))
+    roles = payload.get("roles", [ROLE_USER])
+    # A string would turn `role in roles` into a substring test ("admin" in "superadmin").
+    if not isinstance(roles, list) or not all(isinstance(role, str) for role in roles):
+        raise _unauthorized("Invalid token")
+
+    return CurrentUser(id=subject, roles=roles)
 
 
 def require_role(role: str):
