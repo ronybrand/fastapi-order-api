@@ -28,13 +28,8 @@ def _escape_like(value) -> str:
     return str(value).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def _is_searchable(column) -> bool:
-    """Coluna marcada como sensivel (info={"sensitive": True}) nunca entra em filtro/ordenacao:
-    um `lk`/`gte` sobre ela revelaria o valor caractere a caractere mesmo que a resposta o omita."""
-    return not column.info.get("sensitive")
-
-
 _LIST_OPERATORS = {"in", "between"}
+_ORDERING_OPERATORS = {"gt", "gte", "lt", "lte", "between"}
 _BOOLEAN_LITERALS = {"true": True, "false": False}
 
 
@@ -61,7 +56,10 @@ def _coerce(column, value):
     if python_type is date:
         return date.fromisoformat(str(value))
     if python_type is Decimal:
-        return Decimal(str(value))
+        number = Decimal(str(value))
+        if not number.is_finite() or "e" in str(value).lower():
+            raise ValueError(f"Not a plain decimal number: {value!r}")
+        return number
     if python_type is UUID:
         return UUID(str(value))
     if isinstance(python_type, type) and issubclass(python_type, enum.Enum):
@@ -69,6 +67,13 @@ def _coerce(column, value):
     if python_type is str:
         return str(value)
     return python_type(value)
+
+
+def _is_unordered(column) -> bool:
+    """Enum e bool so tem igualdade/pertinencia: o enum e guardado como texto, entao "maior que"
+    compararia alfabeticamente, o que nao significa nada."""
+    python_type = column.type.python_type
+    return python_type is bool or (isinstance(python_type, type) and issubclass(python_type, enum.Enum))
 
 
 def _build_condition(column, conditions: list[dict]):
@@ -79,6 +84,8 @@ def _build_condition(column, conditions: list[dict]):
         build = _OPERATORS.get(operator)
         if build is None:
             raise ValueError(f"Unknown operator: {operator}")
+        if operator in _ORDERING_OPERATORS and _is_unordered(column):
+            raise ValueError(f"{operator} is not supported for this field type")
         if operator == "lk" and column.type.python_type is not str:
             raise ValueError("lk is only supported for text fields")
         if operator == "between" and not (isinstance(value, list) and len(value) == 2):
@@ -101,7 +108,7 @@ def paginate(query: Query, model: type, request: SearchRequest) -> tuple[list, i
 
     for field, conditions in (request.filters or {}).items():
         column = columns.get(field)
-        if column is None or not _is_searchable(column):
+        if column is None:
             continue  # campo de filtro desconhecido (ou sensivel): ignora essa condição, não é erro
         try:
             query = query.filter(_build_condition(column, conditions))
@@ -117,7 +124,7 @@ def paginate(query: Query, model: type, request: SearchRequest) -> tuple[list, i
     if request.sort:
         field = request.sort.lstrip("-")
         column = columns.get(field)
-        if column is None or not _is_searchable(column):
+        if column is None:
             raise CustomAPIException(
                 status_code=400,
                 message=f"Unknown sort field: {field}",

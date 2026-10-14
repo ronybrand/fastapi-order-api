@@ -8,11 +8,10 @@ agrupam o histórico por tema, não por tag.
 
 ### Security
 
-- Busca: campos marcados `sensitive` (`tax_id`, `passport_number`, `email`) não entram mais em filtro nem
-  ordenação (oráculo de PII); `lk` trata `%` e `_` como literais; limites de campos, condições, itens de `in`,
+- Busca: `lk` trata `%` e `_` como literais; limites de campos, condições, itens de `in`,
   tamanho de valor e offset no `SearchRequest`.
 - Os 409 de `tax_id` e `passport_number` não ecoam mais o valor (PII).
-- Filtros tipados: valores convertidos estritamente ao tipo da coluna (`bool`, `datetime`, `int`, `UUID`, enum);
+- Filtros tipados (`gt`/`lt`/`between` rejeitados em enum e bool, decimal sem NaN/Infinity/expoente): valores convertidos estritamente ao tipo da coluna (`bool`, `datetime`, `int`, `UUID`, enum);
   `between` exige dois valores, `lk` só em texto; antes `"false"` filtrava como `true`, filtro de data sempre dava 400 e
   `between` com um valor dava 500.
 
