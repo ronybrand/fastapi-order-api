@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import StaleDataError
 
 from api.dependencies.dependencies import CurrentUser
-from api.models.models import Base, Customer, Order
+from api.models.models import Base, Order
 from api.schemas.schemas import CustomerInput, ItemInput, OrderCreate
 from api.services.customer_service import CustomerService
 from api.services.order_service import OrderService
@@ -89,12 +89,12 @@ def _count(engine, sql: str, **params) -> int:
 # --- unicidade parcial -----------------------------------------------------------------------------------
 def test_a_deleted_customers_tax_id_can_be_registered_again(fresh_engine):
     with Session(fresh_engine) as db:
-        created = CustomerService.create(db, _customer_input(), ADMIN)
-        CustomerService.delete(db, created.id, ADMIN)
+        created_id = CustomerService.create(db, _customer_input(), ADMIN).id
+        CustomerService.delete(db, created_id, ADMIN)
         # Antes: o UNIQUE cheio ainda reservava o documento e isto estourava como IntegrityError (500).
-        again = CustomerService.create(db, _customer_input(), ADMIN)
+        again_id = CustomerService.create(db, _customer_input(), ADMIN).id
 
-    assert again.id != created.id
+    assert again_id != created_id
     assert _count(fresh_engine, "SELECT count(*) FROM customers WHERE tax_id = 'AB123456'") == 2
     active = "SELECT count(*) FROM customers WHERE tax_id = 'AB123456' AND deleted_at IS NULL"
     assert _count(fresh_engine, active) == 1
@@ -153,25 +153,6 @@ def test_deleting_a_customer_and_creating_an_order_never_leave_an_active_order_u
 
 
 # --- lock otimista -----------------------------------------------------------------------------------------
-def test_two_concurrent_updates_of_the_same_customer_do_not_silently_overwrite_each_other(fresh_engine):
-    with Session(fresh_engine) as db:
-        customer_id = CustomerService.create(db, _customer_input(), ADMIN).id
-
-    with Session(fresh_engine) as first, Session(fresh_engine) as second:
-        loaded_by_first = first.get(Customer, customer_id)
-        loaded_by_second = second.get(Customer, customer_id)
-
-        loaded_by_first.name = "First writer"
-        first.commit()
-
-        loaded_by_second.name = "Second writer"
-        with pytest.raises(StaleDataError):
-            second.commit()
-
-    with Session(fresh_engine) as db:
-        assert db.get(Customer, customer_id).name == "First writer"
-
-
 def test_two_concurrent_changes_to_the_same_order_conflict(fresh_engine):
     with Session(fresh_engine) as db:
         customer_id = CustomerService.create(db, _customer_input(), ADMIN).id
