@@ -12,6 +12,11 @@ agrupam o histórico por tema, não por tag.
   documento de cliente excluído, dois cadastros simultâneos do mesmo documento, corrida excluir cliente x criar pedido (10 rodadas),
   lock otimista e ciclo `upgrade head` / `check` / `downgrade base` / `upgrade head` das migrations.
 
+- JWT: `JWT_AUDIENCE` e `JWT_ISSUER` são obrigatórios fora de development/test (o default igual ao nome do serviço permitiria
+  reaproveitar um token entre serviços); tolerância de 30 s de relógio (`exp`/`nbf`); `sub` com no máximo 200 caracteres; a
+  validação do token ficou num ponto só (`decode_access_token`), usado também pelo rate limit.
+- Limite de corpo agora também conta os bytes de um upload em chunks, sem `Content-Length` (antes só o header era conferido e
+  um corpo em chunks passava direto).
 - Imagem Docker em dois estágios, só com as dependências de runtime (`requirements.txt`; ferramentas de teste e lint
   foram para `requirements-dev.txt`), base fixada por digest. Compose publica tudo em `127.0.0.1` e com imagens por
   digest. `ci.yml` e `codeql.yml` com `permissions: contents: read`.
