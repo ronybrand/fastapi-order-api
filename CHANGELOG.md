@@ -8,6 +8,11 @@ agrupam o histórico por tema, não por tag.
 
 ### Security
 
+- Broker e SMTP: fora de `development`/`test`, `RABBITMQ_URL` é obrigatória e tem que ser `amqps://` (sem fallback
+  para `guest:guest`), `SMTP_STARTTLS=true` é obrigatório e credencial (`SMTP_USER`/`SMTP_PASSWORD`) nunca trafega
+  sem TLS em nenhum ambiente. A API e o worker falham no boot se a configuração for insegura.
+- Cada mensagem leva um `message_id` (mantido nos retries) e o worker ignora a reentrega de um id já enviado.
+- Destinatário recusado pelo SMTP vai direto para a DLQ, sem retry e sem logar o endereço.
 - Rate limit por usuário (`sub` do token verificado) e por endereço só para anônimos; escritas de pedido têm limite
   próprio (30/min); `/health` fora do limite global.
 - `X-Request-Id` só é propagado se for UUID canônico (senão é substituído): fecha log forging.

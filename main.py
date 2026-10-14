@@ -24,6 +24,7 @@ from api.security.middleware import (
 )
 from api.security.rate_limit import limiter
 from api.utils.custom_api_exception import CustomAPIException
+from api.utils.messaging_config import rabbitmq_url
 
 _SAFE_DEFAULT_ENVS = {"development", "test"}
 APP_ENV = os.environ.get("APP_ENV", "development")
@@ -49,6 +50,10 @@ if IS_PRODUCTION and not _cors_origins:
     raise RuntimeError(
         "CORS_ALLOWED_ORIGINS must be set with at least one origin when APP_ENV=production"
     )
+
+if IS_PRODUCTION:
+    # Falha o boot (e nao so a primeira notificacao) se o broker estiver mal configurado em producao.
+    rabbitmq_url()
 
 app = FastAPI(
     title="FastAPI Order API",

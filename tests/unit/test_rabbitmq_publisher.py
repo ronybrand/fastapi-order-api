@@ -47,6 +47,18 @@ def test_publish_declares_queue_and_publishes_json_body():
     connection.close.assert_called_once()
 
 
+def test_each_published_message_carries_a_unique_message_id():
+    with patch("api.events.rabbitmq_publisher.pika.BlockingConnection") as connection_cls:
+        channel = connection_cls.return_value.channel.return_value
+
+        publish_to_rabbitmq(_EVENT)
+        publish_to_rabbitmq(_EVENT)
+
+    ids = [call.kwargs["properties"].message_id for call in channel.basic_publish.call_args_list]
+    assert len(set(ids)) == 2
+    assert all(len(value) == 36 for value in ids)
+
+
 def test_publish_swallows_connection_errors():
     with patch("api.events.rabbitmq_publisher.pika.BlockingConnection", side_effect=RuntimeError("down")):
         publish_to_rabbitmq(_EVENT)  # não deve levantar
