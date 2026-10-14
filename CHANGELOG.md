@@ -14,6 +14,10 @@ agrupam o histórico por tema, não por tag.
 - Excluir cliente (`FOR UPDATE`) e criar pedido (`FOR SHARE`) serializam na linha do cliente: não sobra mais pedido
   ativo de cliente excluído.
 - `POST /orders/{id}/items` respeita o limite de 200 itens (`VALIDATION-09`), antes só aplicado na criação.
+- JWT: `exp`, `sub`, `aud` e `iss` agora são obrigatórios (antes um token sem `exp` valia para sempre); `roles`
+  que não seja lista de strings é rejeitado (string viraria checagem de substring: `"admin" in "superadmin"`).
+- 401 e 403 usam o mesmo corpo `{message, code, params, request_id}` dos demais erros (`AUTH-01`/`AUTH-02`), sem
+  revelar o papel que faltou, e o 401 leva `WWW-Authenticate: Bearer`.
 - Busca: campos marcados `sensitive` (`tax_id`, `passport_number`, `email`) não entram mais em filtro nem
   ordenação (oráculo de PII); `lk` trata `%` e `_` como literais; limites de campos, condições, itens de `in`,
   tamanho de valor e offset no `SearchRequest`.
