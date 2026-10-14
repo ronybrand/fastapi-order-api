@@ -24,9 +24,10 @@ def _assert_unique(db: Session, customer: CustomerInput, exclude_id: UUID | None
     if tax_id_query.first() is not None:
         raise CustomAPIException(
             status_code=409,
-            message=f"Customer with tax_id {customer.tax_id} already exists",
+            # tax_id e PII: nao e ecoado na mensagem nem nos params.
+            message="Customer with this tax_id already exists",
             code="CONFLICT-01",
-            params={"tax_id": customer.tax_id},
+            params={},
         )
 
     if customer.passport_number:
@@ -38,9 +39,9 @@ def _assert_unique(db: Session, customer: CustomerInput, exclude_id: UUID | None
         if passport_query.first() is not None:
             raise CustomAPIException(
                 status_code=409,
-                message=f"Customer with passport_number {customer.passport_number} already exists",
+                message="Customer with this passport_number already exists",
                 code="CONFLICT-02",
-                params={"passport_number": customer.passport_number},
+                params={},
             )
 
 

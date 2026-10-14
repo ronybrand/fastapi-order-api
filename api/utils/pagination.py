@@ -14,8 +14,19 @@ _OPERATORS = {
     "lte": lambda c, v: c <= v,
     "in": lambda c, v: c.in_(v if isinstance(v, list) else [v]),
     "between": lambda c, v: c.between(v[0], v[1]),
-    "lk": lambda c, v: c.ilike(f"%{v}%"),
+    "lk": lambda c, v: c.ilike(f"%{_escape_like(v)}%", escape="\\"),
 }
+
+
+def _escape_like(value) -> str:
+    """% e _ do termo do cliente sao literais, nao curingas (o escape do LIKE e a barra)."""
+    return str(value).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _is_searchable(column) -> bool:
+    """Coluna marcada como sensivel (info={"sensitive": True}) nunca entra em filtro/ordenacao:
+    um `lk`/`gte` sobre ela revelaria o valor caractere a caractere mesmo que a resposta o omita."""
+    return not column.info.get("sensitive")
 
 
 def _build_condition(column, conditions: list[dict]):
@@ -42,8 +53,8 @@ def paginate(query: Query, model: type, request: SearchRequest) -> tuple[list, i
 
     for field, conditions in (request.filters or {}).items():
         column = columns.get(field)
-        if column is None:
-            continue  # campo de filtro desconhecido: ignora essa condição, não é erro
+        if column is None or not _is_searchable(column):
+            continue  # campo de filtro desconhecido (ou sensivel): ignora essa condição, não é erro
         try:
             query = query.filter(_build_condition(column, conditions))
         except (ValueError, TypeError):
@@ -58,7 +69,7 @@ def paginate(query: Query, model: type, request: SearchRequest) -> tuple[list, i
     if request.sort:
         field = request.sort.lstrip("-")
         column = columns.get(field)
-        if column is None:
+        if column is None or not _is_searchable(column):
             raise CustomAPIException(
                 status_code=400,
                 message=f"Unknown sort field: {field}",
