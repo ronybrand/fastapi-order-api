@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, Path, Request
 from sqlalchemy.orm import Session
 
 from api.dependencies.dependencies import CurrentUser, get_current_user, get_db
@@ -13,9 +13,14 @@ from api.schemas.schemas import (
     PaginatedResponse,
     SearchRequest,
 )
+from api.security.rate_limit import limiter
 from api.services.order_service import OrderService
 
 router = APIRouter(prefix="/orders", tags=["orders"])
+
+# Mais apertado que o default global (100/minute): toda transicao de status abre uma conexao com o
+# broker para publicar a notificacao, e escrita de pedido nao deve ficar no mesmo balde da leitura.
+ORDER_WRITE_RATE_LIMIT = "30/minute"
 
 
 @router.post(
@@ -30,7 +35,9 @@ router = APIRouter(prefix="/orders", tags=["orders"])
         },
     },
 )
+@limiter.limit(ORDER_WRITE_RATE_LIMIT)
 def create_order(
+    request: Request,
     order: OrderCreate,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
@@ -92,7 +99,9 @@ def get_order(
     summary="Delete order",
     responses={404: {"model": DefaultErrorResponse, "description": "RESOURCE-NOT-FOUND-02"}},
 )
+@limiter.limit(ORDER_WRITE_RATE_LIMIT)
 def delete_order(
+    request: Request,
     order_id: UUID = Path(...),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
@@ -111,7 +120,9 @@ def delete_order(
         409: {"model": DefaultErrorResponse, "description": "CONFLICT-00 (concurrent modification)"},
     },
 )
+@limiter.limit(ORDER_WRITE_RATE_LIMIT)
 def add_item(
+    request: Request,
     item: ItemInput,
     order_id: UUID = Path(...),
     db: Session = Depends(get_db),
@@ -134,7 +145,9 @@ def add_item(
         409: {"model": DefaultErrorResponse, "description": "CONFLICT-00 (concurrent modification)"},
     },
 )
+@limiter.limit(ORDER_WRITE_RATE_LIMIT)
 def update_item_quantity(
+    request: Request,
     quantity: ItemQuantityUpdate,
     order_id: UUID = Path(...),
     item_id: UUID = Path(...),
@@ -158,7 +171,9 @@ def update_item_quantity(
         409: {"model": DefaultErrorResponse, "description": "CONFLICT-00 (concurrent modification)"},
     },
 )
+@limiter.limit(ORDER_WRITE_RATE_LIMIT)
 def remove_item(
+    request: Request,
     order_id: UUID = Path(...),
     item_id: UUID = Path(...),
     db: Session = Depends(get_db),
@@ -181,7 +196,9 @@ def remove_item(
         409: {"model": DefaultErrorResponse, "description": "CONFLICT-00 (concurrent modification)"},
     },
 )
+@limiter.limit(ORDER_WRITE_RATE_LIMIT)
 def confirm_order(
+    request: Request,
     order_id: UUID = Path(...),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
@@ -200,7 +217,9 @@ def confirm_order(
         409: {"model": DefaultErrorResponse, "description": "CONFLICT-00 (concurrent modification)"},
     },
 )
+@limiter.limit(ORDER_WRITE_RATE_LIMIT)
 def cancel_order(
+    request: Request,
     order_id: UUID = Path(...),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),

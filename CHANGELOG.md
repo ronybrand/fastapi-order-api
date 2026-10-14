@@ -8,6 +8,11 @@ agrupam o histórico por tema, não por tag.
 
 ### Security
 
+- Rate limit por usuário (`sub` do token verificado) e por endereço só para anônimos; escritas de pedido têm limite
+  próprio (30/min); `/health` fora do limite global.
+- `X-Request-Id` só é propagado se for UUID canônico (senão é substituído): fecha log forging.
+- Recusas precoces (413, `Content-Length` inválido) agora passam por correlation id e security headers; um
+  `Content-Length` não numérico é 400 em vez de 500.
 - Entrada: `name` (200) e `email` (320) com tamanho máximo e nome em branco rejeitado; `unit_price` limitado ao que
   `Numeric(10, 2)` aceita (acima disso virava 500 no INSERT) e `quantity` a 10.000 por item.
 - `tax_id` é gravado e comparado na forma canônica (maiúsculas, sem `.`/`-`/`/`), com no mínimo 5 letras ou dígitos:

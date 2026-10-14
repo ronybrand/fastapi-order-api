@@ -27,9 +27,23 @@ class RequestIdFilter(logging.Filter):
         return True
 
 
+def _accepted_request_id(supplied: str | None) -> str:
+    """O id vem do cliente e acaba em log, header e corpo de erro: so um UUID canonico e aceito;
+    qualquer outra coisa (texto livre, quebra de linha, 10 KB de lixo) e descartada e substituida,
+    o que fecha log forging e header injection."""
+    if supplied is not None:
+        try:
+            parsed = uuid.UUID(supplied)
+        except ValueError:
+            parsed = None
+        if parsed is not None and str(parsed) == supplied.lower():
+            return str(parsed)
+    return str(uuid.uuid4())
+
+
 class CorrelationIdMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        request_id = request.headers.get("X-Request-Id", str(uuid.uuid4()))
+        request_id = _accepted_request_id(request.headers.get("X-Request-Id"))
         token = _request_id_ctx.set(request_id)
         try:
             response = await call_next(request)
@@ -61,13 +75,26 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         content_length = request.headers.get("content-length")
-        if content_length is not None and int(content_length) > self.max_body_size:
-            return JSONResponse(
-                status_code=413,
-                content={
-                    "message": "Request body too large",
-                    "code": "VALIDATION-08",
-                    "params": {"max_bytes": self.max_body_size},
-                },
-            )
+        if content_length is not None:
+            # int() on a non-numeric header used to raise (an unhandled 500).
+            if not content_length.isascii() or not content_length.isdigit():
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "message": "Invalid Content-Length header",
+                        "code": "VALIDATION-01",
+                        "params": {"field": "content-length"},
+                        "request_id": get_request_id(),
+                    },
+                )
+            if int(content_length) > self.max_body_size:
+                return JSONResponse(
+                    status_code=413,
+                    content={
+                        "message": "Request body too large",
+                        "code": "VALIDATION-08",
+                        "params": {"max_bytes": self.max_body_size},
+                        "request_id": get_request_id(),
+                    },
+                )
         return await call_next(request)
