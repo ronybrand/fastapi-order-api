@@ -1,3 +1,8 @@
+import enum
+from datetime import date, datetime
+from decimal import Decimal
+from uuid import UUID
+
 from sqlalchemy import and_, inspect
 from sqlalchemy.orm import Query
 from sqlalchemy.sql.base import ColumnCollection
@@ -23,10 +28,52 @@ def _escape_like(value) -> str:
     return str(value).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def _is_searchable(column) -> bool:
-    """Coluna marcada como sensivel (info={"sensitive": True}) nunca entra em filtro/ordenacao:
-    um `lk`/`gte` sobre ela revelaria o valor caractere a caractere mesmo que a resposta o omita."""
-    return not column.info.get("sensitive")
+_LIST_OPERATORS = {"in", "between"}
+_ORDERING_OPERATORS = {"gt", "gte", "lt", "lte", "between"}
+_BOOLEAN_LITERALS = {"true": True, "false": False}
+
+
+def _coerce(column, value):
+    """Converte o valor do cliente para o tipo Python da coluna, estritamente: qualquer valor que
+    nao seja do tipo vira ValueError (400 VALIDATION-05) em vez de ser aceito por um construtor
+    permissivo (`bool("false")` e True; `datetime("2026-01-01")` e TypeError) ou de chegar ao
+    Postgres como erro de tipo (500)."""
+    if value is None:
+        raise ValueError("A value is required")
+    python_type = column.type.python_type
+    if python_type is bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str) and value.lower() in _BOOLEAN_LITERALS:
+            return _BOOLEAN_LITERALS[value.lower()]
+        raise ValueError(f"Not a boolean: {value!r}")
+    if python_type is int:
+        if isinstance(value, bool) or (isinstance(value, float) and not value.is_integer()):
+            raise ValueError(f"Not an integer: {value!r}")
+        return int(value)
+    if python_type is datetime:
+        return datetime.fromisoformat(str(value))
+    if python_type is date:
+        return date.fromisoformat(str(value))
+    if python_type is Decimal:
+        number = Decimal(str(value))
+        if not number.is_finite() or "e" in str(value).lower():
+            raise ValueError(f"Not a plain decimal number: {value!r}")
+        return number
+    if python_type is UUID:
+        return UUID(str(value))
+    if isinstance(python_type, type) and issubclass(python_type, enum.Enum):
+        return python_type(value)
+    if python_type is str:
+        return str(value)
+    return python_type(value)
+
+
+def _is_unordered(column) -> bool:
+    """Enum e bool so tem igualdade/pertinencia: o enum e guardado como texto, entao "maior que"
+    compararia alfabeticamente, o que nao significa nada."""
+    python_type = column.type.python_type
+    return python_type is bool or (isinstance(python_type, type) and issubclass(python_type, enum.Enum))
 
 
 def _build_condition(column, conditions: list[dict]):
@@ -37,10 +84,18 @@ def _build_condition(column, conditions: list[dict]):
         build = _OPERATORS.get(operator)
         if build is None:
             raise ValueError(f"Unknown operator: {operator}")
+        if operator in _ORDERING_OPERATORS and _is_unordered(column):
+            raise ValueError(f"{operator} is not supported for this field type")
+        if operator == "lk" and column.type.python_type is not str:
+            raise ValueError("lk is only supported for text fields")
+        if operator == "between" and not (isinstance(value, list) and len(value) == 2):
+            raise ValueError("between requires exactly two values")
+        if isinstance(value, list) and operator not in _LIST_OPERATORS:
+            raise ValueError(f"{operator} does not accept a list")
         if isinstance(value, list):
-            coerced = [column.type.python_type(item) for item in value]
+            coerced = [_coerce(column, item) for item in value]
         else:
-            coerced = column.type.python_type(value)
+            coerced = _coerce(column, value)
         clauses.append(build(column, coerced))
     return clauses[0] if len(clauses) == 1 else and_(*clauses)
 
@@ -53,11 +108,11 @@ def paginate(query: Query, model: type, request: SearchRequest) -> tuple[list, i
 
     for field, conditions in (request.filters or {}).items():
         column = columns.get(field)
-        if column is None or not _is_searchable(column):
+        if column is None:
             continue  # campo de filtro desconhecido (ou sensivel): ignora essa condição, não é erro
         try:
             query = query.filter(_build_condition(column, conditions))
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, ArithmeticError, NotImplementedError):
             raise CustomAPIException(
                 status_code=400,
                 message=f"Invalid value for field: {field}",
@@ -69,7 +124,7 @@ def paginate(query: Query, model: type, request: SearchRequest) -> tuple[list, i
     if request.sort:
         field = request.sort.lstrip("-")
         column = columns.get(field)
-        if column is None or not _is_searchable(column):
+        if column is None:
             raise CustomAPIException(
                 status_code=400,
                 message=f"Unknown sort field: {field}",
