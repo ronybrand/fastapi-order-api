@@ -1,0 +1,11 @@
+# Ferramentas de teste, lint e seguranca. A imagem Docker instala so requirements.txt.
+-r requirements.txt
+
+pytest==9.1.1
+pytest-cov==7.1.0
+httpx2==2.13.1
+testcontainers[postgres]==4.15.0
+
+ruff==0.17.0
+mypy==2.4.0
+bandit==1.9.4
