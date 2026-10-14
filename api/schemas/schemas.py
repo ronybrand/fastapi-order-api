@@ -5,6 +5,13 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from api.models.models import OrderStatus
+from api.utils.field_limits import (
+    MAX_EMAIL_LENGTH,
+    MAX_NAME_LENGTH,
+    MAX_QUANTITY,
+    MAX_UNIT_PRICE,
+    MIN_TAX_ID_SIGNIFICANT_CHARS,
+)
 from api.utils.max_items import MAX_ITEMS_PER_ORDER
 from api.utils.search_limits import (
     MAX_CONDITIONS_PER_FIELD,
@@ -76,10 +83,34 @@ class PaginatedResponse[T](BaseModel):
 # --- CUSTOMER ---
 class CustomerInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    name: str = Field(min_length=1)
+    name: str = Field(min_length=1, max_length=MAX_NAME_LENGTH)
     tax_id: str = Field(pattern=r"^[A-Za-z0-9./-]{5,20}$")
     passport_number: str | None = Field(default=None, pattern=r"^[A-Z0-9]{6,9}$")
     email: EmailStr
+
+    @field_validator("name")
+    @classmethod
+    def name_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("name must not be blank")
+        return value
+
+    @field_validator("email")
+    @classmethod
+    def email_within_column_limit(cls, value: str) -> str:
+        if len(value) > MAX_EMAIL_LENGTH:
+            raise ValueError(f"email must have at most {MAX_EMAIL_LENGTH} characters")
+        return value
+
+    @field_validator("tax_id")
+    @classmethod
+    def canonical_tax_id(cls, value: str) -> str:
+        """Pontuacao e caixa sao formatacao, nao identidade: "123.456-78" e "12345678" sao o mesmo
+        documento, entao o valor gravado (e comparado pela unicidade) e sempre a forma canonica."""
+        canonical = "".join(char for char in value if char.isalnum()).upper()
+        if len(canonical) < MIN_TAX_ID_SIGNIFICANT_CHARS:
+            raise ValueError(f"tax_id must contain at least {MIN_TAX_ID_SIGNIFICANT_CHARS} letters or digits")
+        return canonical
 
 
 class CustomerResponse(BaseModel):
@@ -97,8 +128,8 @@ class CustomerResponse(BaseModel):
 class ItemInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     description: str = Field(min_length=1, max_length=255)
-    unit_price: Decimal = Field(gt=0)
-    quantity: int = Field(gt=0)
+    unit_price: Decimal = Field(gt=0, le=MAX_UNIT_PRICE)
+    quantity: int = Field(gt=0, le=MAX_QUANTITY)
 
     @field_validator("description")
     @classmethod
@@ -118,7 +149,7 @@ class ItemInput(BaseModel):
 
 class ItemQuantityUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    quantity: int = Field(gt=0)
+    quantity: int = Field(gt=0, le=MAX_QUANTITY)
 
 
 class ItemResponse(BaseModel):
