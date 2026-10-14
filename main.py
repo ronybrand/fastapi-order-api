@@ -18,9 +18,11 @@ from api.routers import customers, orders
 from api.security.middleware import (
     BodySizeLimitMiddleware,
     CorrelationIdMiddleware,
+    RequestBodyTooLarge,
     RequestIdFilter,
     SecurityHeadersMiddleware,
     get_request_id,
+    request_body_too_large_handler,
 )
 from api.security.rate_limit import limiter
 from api.utils.custom_api_exception import CustomAPIException
@@ -101,6 +103,8 @@ async def custom_api_exception_handler(request: Request, exc: CustomAPIException
     content = {**exc.detail, "request_id": get_request_id()}  # type: ignore[dict-item]
     return JSONResponse(status_code=exc.status_code, content=content)
 
+
+app.add_exception_handler(RequestBodyTooLarge, request_body_too_large_handler)
 
 _AUTH_ERRORS = {
     status.HTTP_401_UNAUTHORIZED: ("Authentication required", "AUTH-01"),

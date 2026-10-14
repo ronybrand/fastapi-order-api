@@ -82,3 +82,32 @@ def test_get_current_user_rejects_token_without_subject():
         get_current_user(credentials)
 
     assert exc.value.status_code == 401
+
+
+def test_production_requires_an_explicit_jwt_audience_and_issuer(
+    _restore_dependencies_module_after, monkeypatch
+):
+    """In production a missing JWT_AUDIENCE/JWT_ISSUER must not silently fall back to the service
+    name: the same default on two services would let a token for one be replayed on the other."""
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.delenv("JWT_AUDIENCE", raising=False)
+    monkeypatch.setenv("JWT_ISSUER", "https://idp.example")
+
+    with pytest.raises(RuntimeError, match="JWT_AUDIENCE"):
+        _reload_dependencies_module()
+
+    monkeypatch.setenv("JWT_AUDIENCE", "orders-api")
+    monkeypatch.delenv("JWT_ISSUER", raising=False)
+
+    with pytest.raises(RuntimeError, match="JWT_ISSUER"):
+        _reload_dependencies_module()
+
+
+def test_development_keeps_the_service_name_defaults(_restore_dependencies_module_after, monkeypatch):
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.delenv("JWT_AUDIENCE", raising=False)
+    monkeypatch.delenv("JWT_ISSUER", raising=False)
+
+    module = _reload_dependencies_module()
+
+    assert (module.JWT_AUDIENCE, module.JWT_ISSUER) == ("fastapi-order-api", "fastapi-order-api")
