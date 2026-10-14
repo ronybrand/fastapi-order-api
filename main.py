@@ -59,9 +59,10 @@ app = FastAPI(
 
 app.state.limiter = limiter
 
+# add_middleware empilha de dentro para fora: o ULTIMO registrado e o mais externo. A ordem abaixo faz
+# toda resposta (inclusive as recusas precoces: 413, 400 de Content-Length, preflight de CORS) passar
+# por correlation id e security headers.
 app.add_middleware(SlowAPIMiddleware)
-app.add_middleware(CorrelationIdMiddleware)
-app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(BodySizeLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -70,6 +71,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(CorrelationIdMiddleware)
 
 
 @app.exception_handler(RateLimitExceeded)
@@ -175,6 +178,7 @@ app.include_router(orders.router)
 
 
 @app.get("/health", summary="Health check")
+@limiter.exempt
 def health_check(db=Depends(get_db)):
     """Confere conectividade real com o banco (`SELECT 1`)."""
     db.execute(text("SELECT 1"))
