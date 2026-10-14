@@ -10,6 +10,7 @@ from api.models.models import Customer, Item, Order, OrderStatus
 from api.schemas.schemas import ItemInput, OrderCreate, SearchRequest
 from api.services.order_service import OrderService
 from api.utils.custom_api_exception import CustomAPIException
+from api.utils.max_items import MAX_ITEMS_PER_ORDER
 
 CURRENT_USER = CurrentUser(id="tester", roles=["user"])
 
@@ -32,6 +33,32 @@ def test_create_order_happy_path():
     assert mock_db.add.call_count == 2  # Order + 1 Item
     mock_db.flush.assert_called_once()
     mock_db.commit.assert_called_once()
+
+
+def test_create_order_takes_a_shared_lock_on_the_customer_row():
+    """FOR SHARE blocks behind a concurrent customer delete (FOR UPDATE) and re-reads after it,
+    so an order is never created for a customer that was deleted in between."""
+    mock_db = MagicMock(spec=Session)
+    customer = Customer(id=uuid4(), tax_id="AB123456", email="a@example.com")
+    mock_db.query.return_value.filter.return_value.first.return_value = customer
+
+    OrderService.create(mock_db, OrderCreate(customer_id=customer.id, items=[]), CURRENT_USER)
+
+    mock_db.query.return_value.filter.return_value.with_for_update.assert_called_once_with(read=True)
+
+
+def test_add_item_is_rejected_when_the_order_already_has_the_maximum_number_of_items():
+    order = Order(id=uuid4(), status=OrderStatus.OPEN, items=[Item() for _ in range(MAX_ITEMS_PER_ORDER)])
+    mock_db = _mock_db_with_order(order)
+
+    with pytest.raises(CustomAPIException) as exc:
+        OrderService.add_item(
+            mock_db, order.id, ItemInput(description="Widget", unit_price=1, quantity=1), CURRENT_USER
+        )
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail["code"] == "VALIDATION-09"
+    mock_db.commit.assert_not_called()
 
 
 def test_create_order_invalid_customer_raises_validation_error():

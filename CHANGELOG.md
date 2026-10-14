@@ -8,6 +8,12 @@ agrupam o histórico por tema, não por tag.
 
 ### Security
 
+- `tax_id` e `passport_number` são únicos só entre clientes ativos (índice único parcial, migration `0002`): antes um
+  cliente excluído mantinha o documento reservado e recadastrá-lo dava 500 (`IntegrityError` sem handler).
+- `IntegrityError` vira 409 (`CONFLICT-01`/`CONFLICT-02`, ou `CONFLICT-04` genérico), sem ecoar o valor.
+- Excluir cliente (`FOR UPDATE`) e criar pedido (`FOR SHARE`) serializam na linha do cliente: não sobra mais pedido
+  ativo de cliente excluído.
+- `POST /orders/{id}/items` respeita o limite de 200 itens (`VALIDATION-09`), antes só aplicado na criação.
 - JWT: `exp`, `sub`, `aud` e `iss` agora são obrigatórios (antes um token sem `exp` valia para sempre); `roles`
   que não seja lista de strings é rejeitado (string viraria checagem de substring: `"admin" in "superadmin"`).
 - 401 e 403 usam o mesmo corpo `{message, code, params, request_id}` dos demais erros (`AUTH-01`/`AUTH-02`), sem
