@@ -6,6 +6,6 @@ pytest-cov==7.1.0
 httpx2==2.13.1
 testcontainers[postgres]==4.15.0
 
-ruff==0.17.0
+ruff==0.17.1
 mypy==2.4.0
 bandit==1.9.4
